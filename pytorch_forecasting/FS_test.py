@@ -1,9 +1,6 @@
 import os
 import warnings
-
 warnings.filterwarnings("ignore")  # avoid printing out absolute paths
-
-
 import copy
 from pathlib import Path
 import warnings
@@ -22,7 +19,9 @@ from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimi
 max_prediction_length = 2*24 #the goal is to make a one-day forecast 48
 max_encoder_length = 7*2*24
 group = 0 # a week 336
-folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/*_Tank.csv'
+# folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/*_Tank.csv'
+folder = 'C:/Users/s3912230' \
+         '/Documents/GitHub/tft/data_simulation/*_Tank.csv'
 dfs = []
 for i in glob.glob(folder):
     data = pd.read_csv(i, index_col=0).reset_index(drop=True)
@@ -58,7 +57,7 @@ training = TimeSeriesDataSet(
     static_reals=["tank_max_height", "tank_max_volume"], #tank max height, tank max volume, no. of pumps attached to the tank
     time_varying_known_categoricals=["Time_of_day"], #season, month, remove "Month", "Year", "Season" if use only a month of data for training
     time_varying_known_reals=["time_idx"], #time_idx,
-    time_varying_unknown_categoricals=["period"], #period (idle, transaction, delivery)
+    time_varying_unknown_categoricals=["period"],  #  period (idle, transaction, delivery)
     time_varying_unknown_reals=[
         "Var_tc_readjusted",
         "Del_tc",
@@ -66,7 +65,7 @@ training = TimeSeriesDataSet(
         "ClosingHeight_tc_readjusted",
         "ClosingStock_tc_readjusted",
         "TankTemp",
-    ], #variance, volume, height, sales(-), delivery(+), temperature,
+    ], # variance, volume, height, sales(-), delivery(+), temperature,
     add_relative_time_idx=True,
     add_target_scales=True,
     add_encoder_length=True,
