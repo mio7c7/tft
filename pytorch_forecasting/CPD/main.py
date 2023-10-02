@@ -87,13 +87,16 @@ path = 'C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/lightning_log
 best_tft = TemporalFusionTransformer.load_from_checkpoint(path)
 
 predictions = best_tft.predict(test_dataloader, mode="raw", return_x=True, trainer_kwargs=dict(accelerator="cpu"))
-print('kk')
 xs = [i for i in range(128*12)]
-actual = test_sequence[lambda x: (x.time_idx < 128*12)]['Var_tc_readjusted'].iloc[:128*12]
+actual = test_sequence[lambda x: (x.time_idx < 128*12)]['Var_tc_readjusted'].array
 pred = predictions.output["prediction"]
-plotter(xs, y_hat, label="predicted", c=pred_color)
-plotter(xs, actual, label="predicted", c=pred_color)
 y_hat = []
-for i in range(pred.shape[0]):
+for i in range(pred.shape[0]-max_prediction_length+1):
     y_hat.append(pred.data[i, 0, 3].numpy().min())
+fig, ax = plt.subplots()
+ax.plot(xs, actual, label="actual")
+ax.plot(xs, y_hat, label="actual")
+plt.show()
+# plotter(xs, y_hat, label="predicted", c=pred_color)
+# plotter(xs, actual, label="predicted", c=pred_color)
 
