@@ -3,7 +3,7 @@ import warnings
 
 warnings.filterwarnings("ignore")  # avoid printing out absolute paths
 
-
+os.chdir("../../..")
 import copy
 from pathlib import Path
 import warnings
@@ -21,13 +21,13 @@ from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 max_prediction_length = 2*24 #the goal is to make a one-day forecast 48
 max_encoder_length = 7*2*24
-group = 0 # a week 336
+group = 0# a week 336
 folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/*_Tank.csv'
 dfs = []
 for i in glob.glob(folder):
     data = pd.read_csv(i, index_col=0).reset_index(drop=True)
     data = data.iloc[:2000]
-    data['group_id'] = str(group)
+    data['group_id'] = group
     group += 1
     data["time_idx"] = data.index
     training_cutoff = data["time_idx"].max() - max_prediction_length
@@ -42,8 +42,6 @@ for i in glob.glob(folder):
 combined_df = pd.concat(dfs, ignore_index=True)
 combined_df = combined_df.dropna(subset=['ClosingHeight_readjusted'])
 combined_df = combined_df.dropna(subset=['ClosingHeight_tc_readjusted'])
-combined_df = combined_df.dropna(subset=['Var_tc_readjusted'])
-combined_df = combined_df.drop(columns=["Month", "Year", "Season"])
 
 training = TimeSeriesDataSet(
     combined_df[lambda x: x.time_idx <= training_cutoff],
@@ -56,7 +54,7 @@ training = TimeSeriesDataSet(
     max_prediction_length=max_prediction_length,
     static_categoricals=["group_id"], #tank id, tank location state
     static_reals=["tank_max_height", "tank_max_volume"], #tank max height, tank max volume, no. of pumps attached to the tank
-    time_varying_known_categoricals=["Time_of_day"], #season, month, remove "Month", "Year", "Season" if use only a month of data for training
+    time_varying_known_categoricals=["Time_of_day", "Month", "Year", "Season"], #season, month,
     time_varying_known_reals=["time_idx"], #time_idx,
     time_varying_unknown_categoricals=["period"], #period (idle, transaction, delivery)
     time_varying_unknown_reals=[
@@ -83,7 +81,7 @@ lr_logger = LearningRateMonitor()  # log the learning rate
 logger = TensorBoardLogger("lightning_logs")  # logging results to a tensorboard
 
 trainer = pl.Trainer(
-    max_epochs=1,
+    max_epochs=50,
     accelerator="cpu",
     enable_model_summary=True,
     gradient_clip_val=0.1,
@@ -112,11 +110,3 @@ trainer.fit(
     train_dataloaders=train_dataloader,
     val_dataloaders=val_dataloader,
 )
-
-path = trainer.checkpoint_callback.best_model_path
-best_tft = TemporalFusionTransformer.load_from_checkpoint(path)
-predictions = best_tft.predict(val_dataloader, return_y=True, trainer_kwargs=dict(accelerator="cpu"))
-MAE()(predictions.output, predictions.y)
-raw_predictions = best_tft.predict(val_dataloader, mode="raw", return_x=True)
-for idx in range(10):  # plot 10 examples
-    best_tft.plot_prediction(raw_predictions.x, raw_predictions.output, idx=idx, add_loss_to_title=True)
