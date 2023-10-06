@@ -13,8 +13,8 @@ from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesD
 from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import TensorBoardLogger
 from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
-
 # from utils.estimate_CPD import estimate_CPs
+
 batch_size = 64
 # test_sequence = load_data('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/A082_4_0.757082_Tank.csv')
 # test_sequence = test_sequence.dropna(subset=['ClosingHeight_tc_readjusted'])
@@ -25,7 +25,7 @@ max_prediction_length = 2*24 #the goal is to make a one-day forecast 48
 max_encoder_length = 7*2*24
 # group = 0# a week 336
 # folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/*_Tank.csv'
-# # folder = 'C:/Users/s3912230/Documents/GitHub/tft/data_simulation/*_Tank.csv'
+# folder = 'C:/Users/s3912230/Documents/GitHub/tft/data_simulation/*_Tank.csv'
 # dfs = []
 # for i in glob.glob(folder):
 #     data = pd.read_csv(i, index_col=0).reset_index(drop=True)
@@ -50,6 +50,8 @@ test_sequence = test_sequence[(test_sequence['group_id'] == 'A128_5')]
 test_sequence = test_sequence.drop(columns=["Month", "Year", "Season"])
 test_sequence['period'] = test_sequence['period'].astype(str)
 max = test_sequence["time_idx"].max() - max_prediction_length
+xs = [i for i in range(max_encoder_length-1, max_encoder_length-1 + 128*12)]
+actual = test_sequence[lambda x: (x.time_idx < max_encoder_length-1 + 128*12) & (x.time_idx >= max_encoder_length-1)]['Var_tc_readjusted'].array
 test_data = TimeSeriesDataSet(
     test_sequence[lambda x: (x.time_idx <= max)],
     time_idx="time_idx",
@@ -82,20 +84,19 @@ test_data = TimeSeriesDataSet(
 test = TimeSeriesDataSet.from_dataset(test_data,  test_sequence[lambda x: (x.time_idx < 128*12)], stop_randomization=True)
 test_dataloader = test.to_dataloader(train=False, batch_size=128, num_workers=0)
 
-path = 'C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/lightning_logs/lightning_logs/version_0/checkpoints/epoch=0-step=50.ckpt'
-# path = 'C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/lightning_logs/lightning_logs/version_3/checkpoints/epoch=0-step=50.ckpt'
+# path = 'C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/lightning_logs/lightning_logs/version_0/checkpoints/epoch=0-step=50.ckpt'
+path = 'C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/lightning_logs/lightning_logs/version_3/checkpoints/epoch=0-step=50.ckpt'
 best_tft = TemporalFusionTransformer.load_from_checkpoint(path)
 
 predictions = best_tft.predict(test_dataloader, mode="raw", return_x=True, trainer_kwargs=dict(accelerator="cpu"))
-xs = [i for i in range(128*12)]
-actual = test_sequence[lambda x: (x.time_idx < 128*12)]['Var_tc_readjusted'].array
 pred = predictions.output["prediction"]
 y_hat = []
 for i in range(pred.shape[0]-max_prediction_length+1):
     y_hat.append(pred.data[i, 0, 3].numpy().min())
 fig, ax = plt.subplots()
 ax.plot(xs, actual, label="actual")
-ax.plot(xs, y_hat, label="actual")
+ax.plot(xs, y_hat, label="prediction")
+ax.legend()
 plt.show()
 # plotter(xs, y_hat, label="predicted", c=pred_color)
 # plotter(xs, actual, label="predicted", c=pred_color)
