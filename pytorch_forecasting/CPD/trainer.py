@@ -36,8 +36,8 @@ for group_id, group_df in groups:
     Q1 = group_df[column_name].quantile(0.25)
     Q3 = group_df[column_name].quantile(0.75)
     IQR = Q3 - Q1
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
+    lower_bound = Q1 - 1.75 * IQR
+    upper_bound = Q3 + 1.75 * IQR
     group_df = group_df[(group_df[column_name] >= lower_bound) & (group_df[column_name] <= upper_bound)]
     group_df['Var_tc_readjusted'] = group_df['Var_tc_readjusted'].rolling(window=window_size, min_periods=1).mean()
     group_df = group_df.reset_index(drop=True)
