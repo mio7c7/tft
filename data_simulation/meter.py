@@ -38,10 +38,7 @@ def adjust_volume(og, transaction_df, leak_rate, start_date, stop_date, errored_
     cum_var, cum_var_tc = 0, 0
     for idx, row in errored_transaction.iterrows():
         leakage = -leak_rate*row['volume']*0.01
-        leakage_tc = leakage * (1 + tck * (15 - leaking.at[idx, 'TankTemp']))
         cum_var += leakage
-        cum_var_tc += leakage_tc
-
         #find the corresponding 30mins window
         stop_TS = row.pump_stop_DN
         try:
@@ -49,17 +46,14 @@ def adjust_volume(og, transaction_df, leak_rate, start_date, stop_date, errored_
         except:
             matching_row = leaking.iloc[0]
         curr = matching_row.name
+        leakage_tc = leakage * (1 + tck * (15 - leaking.at[curr, 'TankTemp']))
+        cum_var_tc += leakage_tc
         leaking.at[curr, 'Var_readjusted'] += leakage
         leaking.at[curr, 'Var_tc_readjusted'] += leakage_tc
         leaking.at[curr, 'ClosingStock_readjusted'] = matching_row.ClosingStock_readjusted + cum_var
         leaking.at[curr, 'ClosingHeight_readjusted'] = interpolate_height(matching_row.ClosingStock_readjusted)
         leaking.at[curr, 'ClosingStock_tc_readjusted'] = matching_row.ClosingStock_tc_readjusted + cum_var_tc
         leaking.at[curr, 'ClosingHeight_tc_readjusted'] = interpolate_height(matching_row.ClosingStock_tc_readjusted)
-        if idx > leaking.index[0]:
-            leaking.at[curr, 'OpeningStock_readjusted'] = leaking.loc[curr - 1, 'ClosingStock_readjusted']
-            leaking.at[curr, 'OpeningHeight_readjusted'] = leaking.loc[curr - 1, 'ClosingHeight_readjusted']
-            leaking.at[curr, 'OpeningStock_tc_readjusted'] = leaking.loc[curr - 1, 'ClosingStock_tc_readjusted']
-            leaking.at[curr, 'OpeningHeight_tc_readjusted'] = leaking.loc[curr - 1, 'ClosingHeight_tc_readjusted']
 
     after = og[og['Time_DN'] > stop_date].copy()
     res = pd.concat([before, leaking, after])
@@ -83,16 +77,19 @@ else:
     simulate_info = pd.DataFrame(columns=['Site', 'Tank', 'Pump', 'ME_rate', 'Start_date', 'Stop_date', 'File_name'])
 
 for i in glob.glob(folder):
-    if C == 0:
-        C += 1
-        continue
+    # if C == 0:
+    #     C += 1
+    #     continue
     fs_30mins = pd.read_csv(i, index_col=0).reset_index(drop=True)
     Site = i[i.rfind('\\')+1:i.rfind('\\')+5]
     tank = i[i.rfind('Tank')+6]
     grade = i[i.rfind('_')-1]
     tck = 0.000843811 if grade == 4 else 0.00125135
+    item_exists = (simulate_info['Site'] == Site) & (simulate_info['Tank'] == int(tank))
+    if item_exists.any():
+        continue
 
-    site_dir = 'F:/Meter error/Pump Cal report/Data/' + Site + '/RQ3/'
+    site_dir = 'G:/Meter error/Pump Cal report/Data/' + Site + '/RQ3/'
     transactions_files = [filename for filename in os.listdir(site_dir) if filename.endswith('.csv') and '_transactions_' in filename]
     dataframes = []
     for filename in transactions_files:
@@ -157,16 +154,16 @@ for i in glob.glob(folder):
     errored_pump = random.choice(transaction_tank.sticker_number.unique())
     induced_df = adjust_volume(inventory_30ms, transaction_tank, rate, start_date, stop_date, errored_pump, reversedSC, tck)
     induced_df = assign_period(induced_df)
-    # induced_df['var/sales'] = induced_df['Var_tc_readjusted'] / induced_df['Sales_Ini_tc'].replace(0, 1)
     final = df_format(induced_df)
+    final['var/sales'] = final['Var_tc_readjusted'] / final['Sales_Ini_tc'].replace(0, 1)
 
     file_name = Site + '_' + tank + "_" + str(rate) + '_' + str(errored_pump) + '_ME'
     final.to_csv(file_name + '.csv')
     # idle = 0, transaction = 1, delivery = 2
     color_map = {
-        0: 'red',
-        1: 'blue',
-        2: 'green'
+        '0': 'red',
+        '1': 'blue',
+        '2': 'green'
     }
 
     scatter = []
@@ -174,9 +171,9 @@ for i in glob.glob(folder):
         category_df = final[final['period'] == category]
         scatter.append(
             go.Scatter(
-                x=final['Time'],
+                x=category_df['Time'],
                 # y=category_df['Var_tc_readjusted'],
-                y=final['var/sales'],
+                y=category_df['var/sales'],
                 mode='markers',
                 name=category,
                 marker=dict(
@@ -192,17 +189,17 @@ for i in glob.glob(folder):
     layout = go.Layout(
         title=str(datetime.fromtimestamp(start_date)) + '_' + str(datetime.fromtimestamp(stop_date)),
         xaxis=dict(title='Time'),
-        yaxis=dict(title='VAR_adjusted'),
+        yaxis=dict(title='var/sales'),
         showlegend=True
     )
 
     # Create the figure and show the plot
     fig = go.Figure(data=scatter, layout=layout)
-    # fig.show()
     plotly.offline.plot(fig, filename=file_name + '.html', auto_open=False)
     simulate_info.loc[C] = [Site, tank, errored_pump, rate, start_date, stop_date, file_name]
     C += 1
+    simulate_info.to_csv('metererror_info.csv')
 
-simulate_info.to_csv('bottom005_info.csv')
+
 
 
