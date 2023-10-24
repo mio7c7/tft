@@ -19,56 +19,72 @@ from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimi
 import pickle
 
 max_prediction_length = 2*24 #the goal is to make a one-day forecast 48
-max_encoder_length = 7*2*24
-group = 0 # a week 336
+max_encoder_length = 3*2*24
 test_sequence = pd.read_csv('tankleak.csv')
 test_sequence = test_sequence.drop(columns=["Month", "Year", "Season"])
+test_sequence = test_sequence[test_sequence['period']==0]
 test_sequence['period'] = test_sequence['period'].astype(str)
-TRAINSIZE = 2000
+TRAINSIZE = 4000
 VALIDSIZE = 500
 data = test_sequence[lambda x: x.time_idx <= TRAINSIZE+VALIDSIZE]
 
+processed_dfs = []
+column_name = 'Var_tc_readjusted'
+groups = test_sequence.groupby('group_id')
+window_size = 10
+for group_id, group_df in groups:
+    Q1 = group_df[column_name].quantile(0.25)
+    Q3 = group_df[column_name].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    group_df = group_df[(group_df[column_name] >= lower_bound) & (group_df[column_name] <= upper_bound)]
+    group_df['Var_tc_readjusted'] = group_df['Var_tc_readjusted'].rolling(window=window_size, min_periods=1).mean()
+    group_df = group_df.reset_index(drop=True)
+    group_df['time_idx'] = group_df.index
+    processed_dfs.append(group_df)
+final_df = pd.concat(processed_dfs, ignore_index=True)
+
+max_prediction_length = 2*24 #the goal is to make a one-day forecast 48
+max_encoder_length = 3*2*24
 training = TimeSeriesDataSet(
-    test_sequence[lambda x: x.time_idx <= TRAINSIZE],
+    final_df[lambda x: x.time_idx <= 4000],
     time_idx="time_idx",
     target="Var_tc_readjusted", #variance
     group_ids=["group_id"], #tank id
-    min_encoder_length=max_encoder_length // 2,  # keep encoder length long (as it is in the validation set)
+    min_encoder_length=max_encoder_length,  # keep encoder length long (as it is in the validation set)
     max_encoder_length=max_encoder_length,
-    min_prediction_length=1,
+    min_prediction_length=max_prediction_length,
     max_prediction_length=max_prediction_length,
     static_categoricals=["group_id"], #tank id, tank location state
     static_reals=["tank_max_height", "tank_max_volume"], #tank max height, tank max volume, no. of pumps attached to the tank
     time_varying_known_categoricals=["Time_of_day"], #season, month, remove "Month", "Year", "Season" if use only a month of data for training
     time_varying_known_reals=["time_idx"], #time_idx,
-    time_varying_unknown_categoricals=["period"],  #  period (idle, transaction, delivery)
+    time_varying_unknown_categoricals=[],  #  period (idle, transaction, delivery)
     time_varying_unknown_reals=[
         "Var_tc_readjusted",
-        "Del_tc",
-        "Sales_Ini_tc",
         "ClosingHeight_tc_readjusted",
         "ClosingStock_tc_readjusted",
         "TankTemp",
-    ], # variance, volume, height, sales(-), delivery(+), temperature,
+    ], # variance, volume, height, sales(-), delivery(+), temperature, "Del_tc", "Sales_Ini_tc",
     add_relative_time_idx=True,
     add_target_scales=True,
     add_encoder_length=True,
     allow_missing_timesteps=True
 )
-
-validation = TimeSeriesDataSet.from_dataset(training, data, predict=True, stop_randomization=True)
+validation = TimeSeriesDataSet.from_dataset(training, final_df, predict=True, stop_randomization=True)
 batch_size = 128  # set this between 32 to 128
 train_dataloader = training.to_dataloader(train=True, batch_size=batch_size, num_workers=0)
 val_dataloader = validation.to_dataloader(train=False, batch_size=batch_size * 10, num_workers=0)
 
-early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
+arly_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
 lr_logger = LearningRateMonitor()  # log the learning rate
 logger = TensorBoardLogger("lightning_logs")  # logging results to a tensorboard
 
 study = optimize_hyperparameters(
     train_dataloader,
     val_dataloader,
-    model_path="optuna_test",
+    model_path="tl_test",
     n_trials=20,
     max_epochs=50,
     gradient_clip_val_range=(0.01, 1.0),
