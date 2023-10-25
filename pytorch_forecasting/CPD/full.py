@@ -37,8 +37,8 @@ residuals = X - reconstructeds
 resmean = residuals.mean()
 M2 = ((residuals - resmean) ** 2).sum()
 
-# path = 'C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=25.ckpt'
-path = 'C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=40.ckpt'
+path = 'C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=29.ckpt'
+# path = 'C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=40.ckpt'
 best_tft = TemporalFusionTransformer.load_from_checkpoint(path)
 
 quantile = 0.95
@@ -62,8 +62,6 @@ test_data = TimeSeriesDataSet(
     time_varying_unknown_categoricals=["period"],  # period (idle, transaction, delivery)
     time_varying_unknown_reals=[
         "Var_tc_readjusted",
-        "Del_tc",
-        "Sales_Ini_tc",
         "ClosingHeight_tc_readjusted",
         "ClosingStock_tc_readjusted",
         "TankTemp",
@@ -134,8 +132,8 @@ while ctr < test_seq.shape[0]:
     if ctr + step >= test_seq.shape[0]:
         break
 
-# tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/tankleakage_info.csv', index_col=0).reset_index(drop=True)
-tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/tankleakage_info.csv', index_col=0).reset_index(drop=True)
+tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/tankleakage_info.csv', index_col=0).reset_index(drop=True)
+# tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/tankleakage_info.csv', index_col=0).reset_index(drop=True)
 site_id = tank_sample_id[:4]
 tank_id = tank_sample_id[-1]
 tank_info = tlgrouths[(tlgrouths['Site']==site_id) & (tlgrouths['Tank']==int(tank_id))]
