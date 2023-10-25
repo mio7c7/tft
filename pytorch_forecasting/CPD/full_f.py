@@ -24,21 +24,26 @@ training_cutoff = 2000 - max_prediction_length
 test_sequence = pd.read_csv('tankleak.csv')
 test_sequence = test_sequence.drop(columns=["Month", "Year", "Season"])
 test_sequence['period'] = test_sequence['period'].astype(str)
-path = 'C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=29.ckpt'
-# path = 'C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=40.ckpt'
+# path = 'C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=29.ckpt'
+path = 'C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=40.ckpt'
 best_tft = TemporalFusionTransformer.load_from_checkpoint(path)
 quantile = 0.95
 threshold = 1
-step = 12
-out_threshold = 1.15
-tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/tankleakage_info.csv',
+step = 24
+out_threshold = 2
+# tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/tankleakage_info.csv',
+#                         index_col=0).reset_index(drop=True)
+tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/tankleakage_info.csv',
                         index_col=0).reset_index(drop=True)
-# tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/tankleakage_info.csv', index_col=0).reset_index(drop=True)
 
 for tank_sample_id in list(test_sequence['group_id'].unique()):
     tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
     tank_sequence = tank_sequence[tank_sequence['period'] == '0']
-    X = np.array(tank_sequence['Var_tc_readjusted'].iloc[:training_cutoff].values)
+    train_seq = tank_sequence.iloc[:training_cutoff]
+    train_seq = train_seq[(train_seq['Var_tc_readjusted'] < 1) & (train_seq['Var_tc_readjusted'] > -1)]
+    train_seq = train_seq.reset_index(drop=True)
+    train_seq['time_idx'] = train_seq.index
+    X = np.array(train_seq['Var_tc_readjusted'].values)
     ssa = SSA(window=5, max_length=len(X))
     X_pred = ssa.reset(X)
     X_pred = ssa.transform(X_pred, state=ssa.get_state())
@@ -47,10 +52,8 @@ for tank_sample_id in list(test_sequence['group_id'].unique()):
     resmean = residuals.mean()
     M2 = ((residuals - resmean) ** 2).sum()
 
-    train = tank_sequence.iloc[:training_cutoff]
-    train['Var_tc_readjusted'] = X
     test_data = TimeSeriesDataSet(
-        tank_sequence[lambda x: (x.time_idx < training_cutoff)],
+        train_seq,
         time_idx="time_idx",
         target="Var_tc_readjusted",  # variance
         group_ids=["group_id"],  # tank id
@@ -75,7 +78,7 @@ for tank_sample_id in list(test_sequence['group_id'].unique()):
         add_encoder_length=True,
         allow_missing_timesteps=True
     )
-    tn = TimeSeriesDataSet.from_dataset(test_data, train, stop_randomization=True)
+    tn = TimeSeriesDataSet.from_dataset(test_data, train_seq, stop_randomization=True)
     train_dataloader = tn.to_dataloader(train=False, batch_size=128, num_workers=0)
     train_predictions = best_tft.predict(train_dataloader, mode="raw", return_x=True,
                                          trainer_kwargs=dict(accelerator="cpu"))
@@ -103,18 +106,22 @@ for tank_sample_id in list(test_sequence['group_id'].unique()):
         residuals = np.concatenate([residuals, residual])
         # start_time = time.time()
         for i1 in range(len(new)):
-            delta = residual[i1] - resmean
-            resmean += delta / (ctr + i1 + training_cutoff)
-            M2 += delta * (residual[i1] - resmean)
-            stdev = math.sqrt(M2 / (ctr + i1 + training_cutoff - 1))
-            threshold_upper = resmean + out_threshold * stdev
-            threshold_lower = resmean - out_threshold * stdev
-
-            if (residual[i1] <= threshold_upper) and (residual[i1] >= threshold_lower):
-                filtered.append(new[i1])
-            else:
+            if new[i1] > 1 or new[i1] < -1:
                 outliers.append(ctr + i1)
                 filtered.append(np.mean(filtered[-5:] if len(filtered) > 5 else 0))
+            else:
+                delta = residual[i1] - resmean
+                resmean += delta / (ctr + i1 + training_cutoff)
+                M2 += delta * (residual[i1] - resmean)
+                stdev = math.sqrt(M2 / (ctr + i1 + training_cutoff - 1))
+                threshold_upper = resmean + out_threshold * stdev
+                threshold_lower = resmean - out_threshold * stdev
+
+                if (residual[i1] <= threshold_upper) and (residual[i1] >= threshold_lower):
+                    filtered.append(new[i1])
+                else:
+                    outliers.append(ctr + i1)
+                    filtered.append(np.mean(filtered[-5:] if len(filtered) > 5 else 0))
         test_seq.loc[ctr:ctr + step - 1, 'Var_tc_readjusted'] = filtered[-step:]
 
         if ctr >= max_prediction_length + max_encoder_length:
@@ -151,10 +158,10 @@ for tank_sample_id in list(test_sequence['group_id'].unique()):
     fig = plt.figure()
     fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
 
-    ax[0].plot(ts, filtered)
+    ax[0].scatter(ts, filtered)
     ax[0].axvline(x=pd.to_datetime(test_seq.loc[startindex, 'Time']), color='green', linestyle='--')
     ax[0].axvline(x=pd.to_datetime(test_seq.loc[stopindex, 'Time']), color='green', linestyle='--')
-    ax[1].plot(ts, scores)
-    ax[1].plot(ts, thresholds)
+    ax[1].scatter(ts, scores)
+    ax[1].scatter(ts, thresholds)
     plt.tight_layout()
     plt.savefig(tank_sample_id + '.png')
