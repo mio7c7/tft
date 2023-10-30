@@ -14,7 +14,7 @@ from evaluation import Evaluation_metrics
 from ssa.btgym_ssa import SSA
 
 parser = argparse.ArgumentParser(description='Mstatistics evaluation on bottom 0.2 data')
-parser.add_argument('--data', type=str, default='C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tankleak.csv', help='directory of data')
+parser.add_argument('--data', type=str, default='C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tankleak.csv', help='directory of data')
 parser.add_argument('--ssa_window', type=int, default=5, help='n_components for ssa preprocessing')
 parser.add_argument('--bs', type=int, default=150, help='buffer size for ssa')
 parser.add_argument('--ws', type=int, default=100, help='window size')
@@ -73,7 +73,7 @@ if __name__ == '__main__':
     VALIDSIZE = args.validsize
     data = test_sequence[lambda x: x.time_idx <= TRAINSIZE + VALIDSIZE]
     data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
-    tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/tankleakage_info.csv',
+    tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/tankleakage_info.csv',
                             index_col=0).reset_index(drop=True)
     processed_dfs = []
     groups = data.groupby('group_id')
@@ -86,6 +86,8 @@ if __name__ == '__main__':
     training_cutoff = 2000 - 48
 
     for tank_sample_id in list(test_sequence['group_id'].unique()):
+        # if tank_sample_id != 'B544_4':
+        #     continue
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
         tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
@@ -236,6 +238,8 @@ if __name__ == '__main__':
             # ax[1].plot(ts, mss)
             # ax[2].plot(ts, filtered)
             plt.savefig(args.outfile + '/' + tank_sample_id + '.png')
+            plt.close('all')
+            del fig
         except:
             print('not able')
         preds = detector.N
@@ -259,13 +263,13 @@ if __name__ == '__main__':
     prec = Evaluation_metrics.precision(no_TPS, no_preds)
     f1score = Evaluation_metrics.F1_score(rec, prec)
     f2score = Evaluation_metrics.F2_score(rec, prec)
-    dd = Evaluation_metrics.detection_delay(delays)
+    # dd = Evaluation_metrics.detection_delay(delays)
     print('recall: ', rec)
     print('false alarm rate: ', FAR)
     print('precision: ', prec)
     print('F1 Score: ', f1score)
     print('F2 Score: ', f2score)
-    print('detection delay: ', dd)
+    # print('detection delay: ', dd)
 
     npz_filename = args.outfile
-    np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score, dd=dd, runtime=sum(runtime)/len(runtime))
+    np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score, runtime=sum(runtime)/len(runtime))

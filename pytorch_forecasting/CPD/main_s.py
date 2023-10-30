@@ -149,6 +149,8 @@ if __name__ == '__main__':
     runtime = []
     error_margin = 864000
     for tank_sample_id in list(test_sequence['group_id'].unique()):
+        # if tank_sample_id != 'F203_5':
+        #     continue
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
         tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
