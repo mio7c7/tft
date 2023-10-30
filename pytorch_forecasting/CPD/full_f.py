@@ -23,7 +23,6 @@ max_prediction_length = 2 * 24  # the goal is to make a one-day forecast 48
 max_encoder_length = 3 * 2 * 24
 training_cutoff = 2000 - max_prediction_length
 test_sequence = pd.read_csv('tankleak.csv')
-test_sequence = test_sequence.drop(columns=["Month", "Year", "Season"])
 test_sequence['period'] = test_sequence['period'].astype(str)
 path = 'C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/standard_normaliser/trial_0/epoch=47.ckpt'
 # path = 'C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tl_test/trial_0/epoch=40.ckpt'

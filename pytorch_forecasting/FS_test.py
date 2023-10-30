@@ -17,16 +17,15 @@ from pytorch_forecasting.data import GroupNormalizer
 from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 max_prediction_length = 2*24 #the goal is to make a one-day forecast 48
-max_encoder_length = 7*2*24
-group = 0 # a week 336
-# folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/*_Tank.csv'
-folder = 'C:/Users/s3912230/Documents/GitHub/tft/data_simulation/*_Tank.csv'
+max_encoder_length = 7*2*24 # a week 336
+folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/*_Tank.csv'
+# folder = 'C:/Users/s3912230/Documents/GitHub/tft/data_simulation/*_Tank.csv'
 dfs = []
 for i in glob.glob(folder):
     data = pd.read_csv(i, index_col=0).reset_index(drop=True)
-    data = data.iloc[:2000]
+    parts = i.rsplit('\\', 1)
+    group = parts[-1][:6]
     data['group_id'] = str(group)
-    group += 1
     data["time_idx"] = data.index
     training_cutoff = data["time_idx"].max() - max_prediction_length
     tank_max_height = data["OpeningHeight_readjusted"].max()
@@ -42,6 +41,7 @@ combined_df = combined_df.dropna(subset=['ClosingHeight_readjusted'])
 combined_df = combined_df.dropna(subset=['ClosingHeight_tc_readjusted'])
 combined_df = combined_df.dropna(subset=['Var_tc_readjusted'])
 combined_df = combined_df.drop(columns=["Month", "Year", "Season"])
+combined_df.to_csv('tl.csv')
 
 training = TimeSeriesDataSet(
     combined_df[lambda x: x.time_idx <= training_cutoff],

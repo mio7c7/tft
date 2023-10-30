@@ -19,9 +19,11 @@ from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 import pickle
 import argparse
-from ssa.btgym_ssa import SSA
 import matplotlib.pyplot as plt
 import math
+import sys
+sys.path.append('./')
+from ssa.btgym_ssa import SSA
 from evaluation import Evaluation_metrics
 
 parser = argparse.ArgumentParser(description='TFT on leakage datra')
@@ -36,20 +38,20 @@ parser.add_argument('--quantile', type=float, default=0.99, help='threshold quan
 parser.add_argument('--threshold_scale', type=float, default=1, help='threshold scale')
 parser.add_argument('--step', type=int, default=12, help='step')
 parser.add_argument('--model_path', type=str,
-                    default='/no_norm/version_1/checkpoints/epoch=49-step=2500.ckpt', help='model_path')
+                    default='/no_normaliser/trial_16/epoch=48.ckpt', help='model_path')
 parser.add_argument('--outfile', type=str, default='no_norm', help='step')
 args = parser.parse_args()
 
 max_prediction_length = args.max_prediction_length
 max_encoder_length = args.max_encoder_length
-test_sequence = pd.read_csv('tankleak.csv')
+test_sequence = pd.read_csv('pytorch_forecasting/CPD/tankleak.csv')
 test_sequence = test_sequence[test_sequence['period'] == 0]
 test_sequence['period'] = test_sequence['period'].astype(str)
 TRAINSIZE = args.trainsize
 VALIDSIZE = args.validsize
 data = test_sequence[lambda x: x.time_idx <= TRAINSIZE + VALIDSIZE]
 data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
-tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/tankleakage_info.csv',
+tlgrouths = pd.read_csv('pytorch_forecasting/CPD/tankleakage_info.csv',
                         index_col=0).reset_index(drop=True)
 
 processed_dfs = []
@@ -165,14 +167,14 @@ if __name__ == '__main__':
         tn = TimeSeriesDataSet.from_dataset(training, train_seq, stop_randomization=True)
         train_dataloader = tn.to_dataloader(train=False, batch_size=128, num_workers=0)
         train_predictions = best_tft.predict(train_dataloader, mode="raw", return_x=True,
-                                             trainer_kwargs=dict(accelerator="cpu"))
+                                             trainer_kwargs=dict(accelerator="gpu"))
         trainpred = train_predictions.output["prediction"][:, :, :]
         traintarget = train_predictions.x["decoder_target"][:, :]
         quantile_loss = loss(trainpred, traintarget)
         quantile_loss = torch.sum(quantile_loss, dim=2)
         quantile_loss, _ = torch.median(quantile_loss, dim=1)
         # MSE = torch.mean((trainpred - traintarget) ** 2, dim=1)
-        base = np.quantile(quantile_loss, args.quantile)
+        base = torch.quantile(quantile_loss, args.quantile)
         final_threshold = args.threshold_scale * base
         test_seq = tank_sequence.iloc[training_cutoff:]
         test_seq = test_seq.reset_index(drop=True)
@@ -180,7 +182,7 @@ if __name__ == '__main__':
         step = args.step
         ts = pd.to_datetime(test_seq['Time'])
         scores = [0] * test_seq.shape[0]
-        errors = np.array(quantile_loss)
+        errors = quantile_loss
         thresholds = [final_threshold] * test_seq.shape[0]
         outliers = []
         filtered = []
@@ -230,7 +232,7 @@ if __name__ == '__main__':
         test = TimeSeriesDataSet.from_dataset(training, test_seq, stop_randomization=True)
         test_dataloader = test.to_dataloader(train=False, batch_size=128, num_workers=0)
         new_raw_predictions = best_tft.predict(test_dataloader, mode="raw", return_x=True,
-                                       trainer_kwargs=dict(accelerator="cpu"))
+                                       trainer_kwargs=dict(accelerator="gpu"))
         onepred = new_raw_predictions.output["prediction"][:, :, :]
         onetarget = new_raw_predictions.x["decoder_target"][:, :]
         quantile_loss = loss(onepred, onetarget)
@@ -241,8 +243,8 @@ if __name__ == '__main__':
         while ctr < len(quantile_loss)-max_prediction_length:
             mse_ind = ctr-max_encoder_length
             mv = quantile_loss[mse_ind:mse_ind+step]
-            errors = np.append(errors, mv)
-            mse_quantile = np.quantile(errors, args.quantile)
+            errors = torch.cat((errors, mv), dim=0)
+            mse_quantile = torch.quantile(errors, args.quantile)
             final_threshold = args.threshold_scale * mse_quantile
             thresholds[ctr:ctr + step] = [final_threshold] * step
             scores[ctr:ctr + step] = mv
@@ -251,8 +253,8 @@ if __name__ == '__main__':
                 ss = test_seq.shape[0] - str
                 mse_ind = ctr - max_encoder_length
                 mv = quantile_loss[mse_ind:mse_ind + ss]
-                errors = np.append(errors, mv)
-                mse_quantile = np.quantile(errors, args.quantile)
+                errors = torch.cat((errors, mv), dim=0)
+                mse_quantile = torch.quantile(errors, args.quantile)
                 final_threshold = args.threshold_scale * mse_quantile
                 thresholds[ctr:ctr + ss] = [final_threshold] * ss
                 scores[ctr:ctr + ss] = mv
@@ -276,6 +278,10 @@ if __name__ == '__main__':
         # thresholds = [0] * max_encoder_length + thresholds + [0] * max_prediction_length
         preds = [idx for idx in range(len(scores)) if scores[idx] > thresholds[idx]]
         preds = find_middle_values(preds)
+        print(scores)
+        scores = [tt.item() if tt != 0 else 0 for tt in scores]
+        thresholds = [tt.item() if tt != 0 else 0 for tt in thresholds]
+
         no_CPs += 2
         no_preds += len(preds)
         mark = []
@@ -290,16 +296,16 @@ if __name__ == '__main__':
                         continue
                     no_TPS += 1
                     delays.append(timestamp - l[2])
-        filtered = filtered + [0] * (len(scores) - len(filtered))
+        filtered = filtered + [0] * (len(ts) - len(filtered))
         fig = plt.figure()
         fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
-        ax[0].plot(ts, filtered)
-        ax[0].axvline(x=pd.to_datetime(test_seq.loc[startindex, 'Time']), color='green', linestyle='--')
-        ax[0].axvline(x=pd.to_datetime(test_seq.loc[stopindex, 'Time']), color='green', linestyle='--')
+        ax[0].plot(ts.array, filtered)
+        ax[0].axvline(x=ts[startindex], color='green', linestyle='--')
+        ax[0].axvline(x=ts[stopindex], color='green', linestyle='--')
         for cp in preds:
             ax[0].axvline(x=ts[cp], color='purple', alpha=0.6)
-        ax[1].scatter(ts, scores)
-        ax[1].scatter(ts, thresholds)
+        ax[1].scatter(ts.array, scores)
+        ax[1].scatter(ts.array, thresholds)
         plt.tight_layout()
         plt.savefig(args.path + '/' + tank_sample_id + '.png')
 
