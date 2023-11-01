@@ -147,6 +147,11 @@ if __name__ == '__main__':
     runtime = []
     error_margin = 864000
     for tank_sample_id in list(test_sequence['group_id'].unique()):
+        if tank_sample_id in ['J791_3', 'J810_2', 'R047_4', 'R047_5']:
+            continue
+        if os.path.isfile('explog.npz'):
+            data = np.load('explog.npz')
+            no_CPs, no_preds, no_TPS = data['no_CPs'], data['no_preds'], data['no_TPS']
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
         tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
@@ -290,6 +295,7 @@ if __name__ == '__main__':
                         continue
                     no_TPS += 1
                     delays.append(timestamp - l[2])
+        np.savez('explog', no_CPs=no_CPs, no_preds=no_preds, no_TPS=no_TPS)
         filtered = filtered + [0] * (len(scores) - len(filtered))
         fig = plt.figure()
         fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)

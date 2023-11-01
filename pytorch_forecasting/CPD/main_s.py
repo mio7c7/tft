@@ -35,7 +35,7 @@ parser.add_argument('--out_threshold', type=float, default=2, help='threshold fo
 parser.add_argument('--path', type=str, default='no_norm', help='TensorBoardLogger')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
 parser.add_argument('--quantile', type=float, default=0.99, help='threshold quantile')
-parser.add_argument('--threshold_scale', type=float, default=1, help='threshold scale')
+parser.add_argument('--threshold_scale', type=float, default=2, help='threshold scale')
 parser.add_argument('--step', type=int, default=12, help='step')
 parser.add_argument('--model_path', type=str,
                     default='/no_normaliser/trial_16/epoch=48.ckpt', help='model_path')
@@ -120,19 +120,21 @@ def loss(y_pred, target):
     return losses
 
 def find_middle_values(values):
+    if len(values) == 0:
+        return []
     consecutive_sequences = []
     current_sequence = [values[0]]
     for i in range(1, len(values)):
         if values[i] - values[i-1] == 1:
             current_sequence.append(values[i])
         else:
-            if len(current_sequence) >= 10:
+            if len(current_sequence) >= 16:
                 middle_index = len(current_sequence) // 2
                 middle_value = current_sequence[middle_index]
                 consecutive_sequences.append(middle_value)
             current_sequence = [values[i]]
     # Check if there's a sequence at the end
-    if len(current_sequence) >= 10:
+    if len(current_sequence) >= 16:
         middle_index = len(current_sequence) // 2
         middle_value = current_sequence[middle_index]
         consecutive_sequences.append(middle_value)
@@ -148,7 +150,20 @@ if __name__ == '__main__':
     delays = []
     runtime = []
     error_margin = 864000
+
+    if not os.path.exists(args.outfile):
+        os.makedirs(args.outfile)
+    dones = [f for f in os.listdir(args.outfile + '/') if os.path.isfile(os.path.join(args.outfile + '/', f))]
+    dones = [f[:6] for f in dones]
+
     for tank_sample_id in list(test_sequence['group_id'].unique()):
+        if tank_sample_id in ['B544_4','F202_1','J791_3', 'J791_4', 'J810_2', 'R047_4', 'R047_5']:
+            continue
+        if tank_sample_id in dones:
+            continue
+        if os.path.isfile('explog.npz'):
+            data = np.load('explog.npz')
+            no_CPs, no_preds, no_TPS = data['no_CPs'], data['no_preds'], data['no_TPS']
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
         tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
@@ -296,6 +311,7 @@ if __name__ == '__main__':
                         continue
                     no_TPS += 1
                     delays.append(timestamp - l[2])
+        np.savez('explog', no_CPs=no_CPs, no_preds=no_preds, no_TPS=no_TPS)
         filtered = filtered + [0] * (len(ts) - len(filtered))
         fig = plt.figure()
         fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
@@ -307,7 +323,9 @@ if __name__ == '__main__':
         ax[1].scatter(ts.array, scores)
         ax[1].scatter(ts.array, thresholds)
         plt.tight_layout()
-        plt.savefig(args.path + '/' + tank_sample_id + '.png')
+        plt.savefig(args.outfile + '/' + tank_sample_id + '.png')
+        plt.close('all')
+        del fig
 
     rec = Evaluation_metrics.recall(no_TPS, no_CPs)
     FAR = Evaluation_metrics.False_Alarm_Rate(no_preds, no_TPS)

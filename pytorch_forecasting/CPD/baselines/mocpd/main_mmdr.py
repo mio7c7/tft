@@ -63,6 +63,8 @@ if __name__ == '__main__':
     delays = []
     runtime = []
     ignored = []
+    dones = [f for f in os.listdir(args.outfile + '/') if os.path.isfile(os.path.join(args.outfile + '/', f))]
+    dones = [f[:6] for f in dones]
 
     if not os.path.exists(args.outfile):
         os.makedirs(args.outfile)
@@ -86,6 +88,11 @@ if __name__ == '__main__':
     training_cutoff = 2000 - 48
 
     for tank_sample_id in list(test_sequence['group_id'].unique()):
+        if tank_sample_id in ['J791_3', 'J810_2', 'R047_4', 'R047_5']:
+            continue
+        # if tank_sample_id in dones:
+        #     continue
+
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
         tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
@@ -236,6 +243,8 @@ if __name__ == '__main__':
             # ax[1].plot(ts, mss)
             # ax[2].plot(ts, filtered)
             plt.savefig(args.outfile + '/' + tank_sample_id + '.png')
+            plt.close('all')
+            del fig
         except:
             print('not able')
         preds = detector.N
@@ -259,13 +268,13 @@ if __name__ == '__main__':
     prec = Evaluation_metrics.precision(no_TPS, no_preds)
     f1score = Evaluation_metrics.F1_score(rec, prec)
     f2score = Evaluation_metrics.F2_score(rec, prec)
-    dd = Evaluation_metrics.detection_delay(delays)
+    # dd = Evaluation_metrics.detection_delay(delays)
     print('recall: ', rec)
     print('false alarm rate: ', FAR)
     print('precision: ', prec)
     print('F1 Score: ', f1score)
     print('F2 Score: ', f2score)
-    print('detection delay: ', dd)
+    # print('detection delay: ', dd)
 
     npz_filename = args.outfile
-    np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score, dd=dd, runtime=sum(runtime)/len(runtime))
+    np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score)
