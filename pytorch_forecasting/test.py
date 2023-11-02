@@ -42,6 +42,7 @@ for i in glob.glob(folder):
 combined_df = pd.concat(dfs, ignore_index=True)
 combined_df = combined_df.dropna(subset=['ClosingHeight_readjusted'])
 combined_df = combined_df.dropna(subset=['ClosingHeight_tc_readjusted'])
+combined_df = combined_df.dropna(subset=['Var_tc_readjusted'])
 
 training = TimeSeriesDataSet(
     combined_df[lambda x: x.time_idx <= training_cutoff],

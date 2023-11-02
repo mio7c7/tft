@@ -14,7 +14,7 @@ from evaluation import Evaluation_metrics
 from ssa.btgym_ssa import SSA
 
 parser = argparse.ArgumentParser(description='Mstatistics evaluation on bottom 0.2 data')
-parser.add_argument('--data', type=str, default='C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tankleak.csv', help='directory of data')
+parser.add_argument('--data', type=str, default='C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tankleak.csv', help='directory of data')
 parser.add_argument('--ssa_window', type=int, default=5, help='n_components for ssa preprocessing')
 parser.add_argument('--bs', type=int, default=150, help='buffer size for ssa')
 parser.add_argument('--ws', type=int, default=100, help='window size')
@@ -63,6 +63,8 @@ if __name__ == '__main__':
     delays = []
     runtime = []
     ignored = []
+    dones = [f for f in os.listdir(args.outfile + '/') if os.path.isfile(os.path.join(args.outfile + '/', f))]
+    dones = [f[:6] for f in dones]
 
     if not os.path.exists(args.outfile):
         os.makedirs(args.outfile)
@@ -73,7 +75,7 @@ if __name__ == '__main__':
     VALIDSIZE = args.validsize
     data = test_sequence[lambda x: x.time_idx <= TRAINSIZE + VALIDSIZE]
     data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
-    tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/tankleakage_info.csv',
+    tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/tankleakage_info.csv',
                             index_col=0).reset_index(drop=True)
     processed_dfs = []
     groups = data.groupby('group_id')
@@ -86,8 +88,11 @@ if __name__ == '__main__':
     training_cutoff = 2000 - 48
 
     for tank_sample_id in list(test_sequence['group_id'].unique()):
-        # if tank_sample_id != 'B544_4':
+        if tank_sample_id in ['J791_3', 'J810_2', 'R047_4', 'R047_5']:
+            continue
+        # if tank_sample_id in dones:
         #     continue
+
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
         tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
@@ -272,4 +277,4 @@ if __name__ == '__main__':
     # print('detection delay: ', dd)
 
     npz_filename = args.outfile
-    np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score, runtime=sum(runtime)/len(runtime))
+    np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score)

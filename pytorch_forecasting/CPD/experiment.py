@@ -42,7 +42,7 @@ args = parser.parse_args()
 max_prediction_length = args.max_prediction_length
 max_encoder_length = args.max_encoder_length
 test_sequence = pd.read_csv('pytorch_forecasting/CPD/tankleak.csv')
-test_sequence = test_sequence.drop(columns=["Month", "Year", "Season"])
+# test_sequence = test_sequence.drop(columns=["Month", "Year", "Season"])
 test_sequence = test_sequence[test_sequence['period'] == 0]
 test_sequence['period'] = test_sequence['period'].astype(str)
 TRAINSIZE = args.trainsize

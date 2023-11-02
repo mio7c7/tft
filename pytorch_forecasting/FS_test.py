@@ -39,6 +39,7 @@ for i in glob.glob(folder):
 combined_df = pd.concat(dfs, ignore_index=True)
 combined_df = combined_df.dropna(subset=['ClosingHeight_readjusted'])
 combined_df = combined_df.dropna(subset=['ClosingHeight_tc_readjusted'])
+combined_df = combined_df.dropna(subset=['ClosingStock_tc_readjusted'])
 combined_df = combined_df.dropna(subset=['Var_tc_readjusted'])
 combined_df = combined_df.drop(columns=["Month", "Year", "Season"])
 combined_df.to_csv('tl.csv')
