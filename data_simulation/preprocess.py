@@ -10,7 +10,8 @@ import plotly
 import os
 import matplotlib.pyplot as plt
 
-folder = 'C:/Users/Administrator/OneDrive - RMIT University/RQ3 dataset/Full/Normal/*.csv'
+# folder = 'C:/Users/Administrator/OneDrive - RMIT University/RQ3 dataset/Full/Normal/*.csv'
+folder = 'D:/calibrated_30min/WTAF_WSC_csv/normal/*.csv'
 
 for i in glob.glob(folder):
     fs_30mins = pd.read_csv(i, index_col=0).reset_index(drop=True)

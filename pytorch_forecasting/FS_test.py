@@ -18,7 +18,8 @@ from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 max_prediction_length = 2*24 #the goal is to make a one-day forecast 48
 max_encoder_length = 7*2*24 # a week 336
-folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/*_Tank.csv'
+folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/TLR2/*.csv'
+# folder = 'C:/Users/Administrator/Documents/GitHub/tft/data_simulation/tl/*_Tank.csv'
 # folder = 'C:/Users/s3912230/Documents/GitHub/tft/data_simulation/*_Tank.csv'
 dfs = []
 for i in glob.glob(folder):
