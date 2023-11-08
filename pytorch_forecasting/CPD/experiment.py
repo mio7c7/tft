@@ -28,11 +28,11 @@ from ssa.btgym_ssa import SSA
 
 parser = argparse.ArgumentParser(description='TFT on leakage datra')
 parser.add_argument('--max_prediction_length', type=int, default=2 * 24, help='forecast horizon')
-parser.add_argument('--max_encoder_length', type=int, default=3 * 2 * 24, help='past reference data')
+parser.add_argument('--max_encoder_length', type=int, default=5 * 2 * 24, help='past reference data')
 parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
 parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
-parser.add_argument('--path', type=str, default='no_norm', help='TensorBoardLogger')
+parser.add_argument('--path', type=str, default='GroupNormalizer_r2_5d2d', help='TensorBoardLogger')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
 parser.add_argument('--quantile', type=float, default=0.95, help='threshold quantile')
 parser.add_argument('--threshold_scale', type=float, default=1, help='threshold scale')
@@ -41,7 +41,7 @@ args = parser.parse_args()
 
 max_prediction_length = args.max_prediction_length
 max_encoder_length = args.max_encoder_length
-test_sequence = pd.read_csv('pytorch_forecasting/CPD/tankleak.csv')
+test_sequence = pd.read_csv('pytorch_forecasting/CPD/tl.csv')
 # test_sequence = test_sequence.drop(columns=["Month", "Year", "Season"])
 test_sequence = test_sequence[test_sequence['period'] == 0]
 test_sequence['period'] = test_sequence['period'].astype(str)
@@ -49,8 +49,7 @@ TRAINSIZE = args.trainsize
 VALIDSIZE = args.validsize
 data = test_sequence[lambda x: x.time_idx <= TRAINSIZE + VALIDSIZE]
 data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
-tlgrouths = pd.read_csv('pytorch_forecasting/CPD/tankleakage_info.csv',
-                        index_col=0).reset_index(drop=True)
+# tlgrouths = pd.read_csv('pytorch_forecasting/CPD/tankleakage_info.csv', index_col=0).reset_index(drop=True)
 
 processed_dfs = []
 groups = data.groupby('group_id')
@@ -86,14 +85,14 @@ training = TimeSeriesDataSet(
     # target_normalizer=GroupNormalizer(
     #     groups=["group_id"], transformation="relu"
     # ),  # use softplus and normalize by group
-    # target_normalizer=GroupNormalizer(
-    #         method='standard',
-    #         groups=["group_id"],
-    #         center=True,
-    #         scale_by_group=True,
-    #         transformation=None,
-    #         method_kwargs={}
-    # ),
+    target_normalizer=GroupNormalizer(
+            method='standard',
+            groups=["group_id"],
+            center=True,
+            scale_by_group=True,
+            transformation=None,
+            method_kwargs={}
+    ),
     add_relative_time_idx=True,
     add_target_scales=True,
     add_encoder_length=True,
@@ -111,14 +110,14 @@ logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name=args.path)  # l
 study = optimize_hyperparameters(
     train_dataloader,
     val_dataloader,
-    model_path="no_normaliser",
+    model_path=args.path,
     n_trials=20,
     max_epochs=50,
     gradient_clip_val_range=(0.01, 1.0),
-    hidden_size_range=(8, 128),
-    hidden_continuous_size_range=(8, 128),
+    hidden_size_range=(4, 64),
+    hidden_continuous_size_range=(4, 64),
     attention_head_size_range=(1, 4),
-    learning_rate_range=(0.001, 0.1),
+    learning_rate_range=(0.0001, 0.1),
     dropout_range=(0.1, 0.3),
     trainer_kwargs=dict(limit_train_batches=30),
     reduce_on_plateau_patience=4,
