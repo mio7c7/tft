@@ -1,10 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=ari    # Job name
-#SBATCH --output=no_normaliser_r2_5d.log          # Output file
-#SBATCH --error=no_normaliser_r2_5derror.log            # Error file
+#SBATCH --output=EncoderNormalizerrobust_r2_5d2d.log          # Output file
+#SBATCH --error=EncoderNormalizerrobust_r2_5d2d.log            # Error file
 #SBATCH --partition=SCT   # Specify a partition (e.g., your_partition)
 #SBATCH --nodes=1                   # Number of nodes
 #SBATCH --ntasks-per-node=4         # Number of tasks
+#SBATCH --gres=gpu:1
 #SBATCH --mem=32G                    # Memory per node (e.g., 4 GB)
 
 # Run the Python script

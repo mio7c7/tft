@@ -14,7 +14,7 @@ from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.tuner import Tuner
 from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesDataSet
-from pytorch_forecasting.data import GroupNormalizer
+from pytorch_forecasting.data import GroupNormalizer, EncoderNormalizer
 from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 import pickle
@@ -87,15 +87,18 @@ training = TimeSeriesDataSet(
         "TankTemp",
     ],  # variance, volume, height, sales(-), delivery(+), temperature, "Del_tc", "Sales_Ini_tc",
     # target_normalizer=GroupNormalizer(
-    #     groups=["group_id"], transformation="relu"
+    #     groups=["group_id"], transformation="softplus"
     # ),  # use softplus and normalize by group
-    # target_normalizer=GroupNormalizer(
-    #         method='standard',
-    #         groups=["group_id"],
-    #         center=True,
-    #         scale_by_group=True,
-    #         transformation=None,
-    #         method_kwargs={}
+    target_normalizer=EncoderNormalizer(
+        method='standard',
+        max_length=None,
+        center=False,
+        transformation=None,
+        method_kwargs={}
+    ),
+    # target_normalizer=EncoderNormalizer(
+    #     method='robust',
+    #     center=False
     # ),
     add_relative_time_idx=True,
     add_target_scales=True,
@@ -162,8 +165,8 @@ if __name__ == '__main__':
             continue
         if tank_sample_id in dones:
             continue
-        if os.path.isfile('explog.npz'):
-            data = np.load('explog.npz')
+        if os.path.isfile(args.outfile + '.npz'):
+            data = np.load(args.outfile + '.npz')
             no_CPs, no_preds, no_TPS = data['no_CPs'], data['no_preds'], data['no_TPS']
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
         tank_sequence = tank_sequence[tank_sequence['period'] == '0']

@@ -65,14 +65,15 @@ training = TimeSeriesDataSet(
     # target_normalizer=GroupNormalizer(
     #     groups=["group_id"], transformation="relu"
     # ),  # use softplus and normalize by group
-    target_normalizer=GroupNormalizer(
-            method='standard',
-            groups=["group_id"],
-            center=True,
-            scale_by_group=True,
-            transformation=None,
-            method_kwargs={}
-    ),
+    # target_normalizer=GroupNormalizer(
+    #         method='standard',
+    #         groups=["group_id"],
+    #         center=True,
+    #         scale_by_group=True,
+    #         transformation=None,
+    #         method_kwargs={}
+    # ),
+
     add_relative_time_idx=True,
     add_target_scales=True,
     add_encoder_length=True,

@@ -14,7 +14,7 @@ from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.tuner import Tuner
 from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesDataSet
-from pytorch_forecasting.data import GroupNormalizer
+from pytorch_forecasting.data import GroupNormalizer, EncoderNormalizer
 from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 import pickle
@@ -44,14 +44,14 @@ args = parser.parse_args()
 
 max_prediction_length = args.max_prediction_length
 max_encoder_length = args.max_encoder_length
-test_sequence = pd.read_csv('pytorch_forecasting/CPD/tankleak.csv')
+test_sequence = pd.read_csv('tankleak.csv')
 test_sequence = test_sequence[test_sequence['period'] == 0]
 test_sequence['period'] = test_sequence['period'].astype(str)
 TRAINSIZE = args.trainsize
 VALIDSIZE = args.validsize
 data = test_sequence[lambda x: x.time_idx <= TRAINSIZE + VALIDSIZE]
 data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
-tlgrouths = pd.read_csv('pytorch_forecasting/CPD/tankleakage_info.csv',
+tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/tankleakage_info.csv',
                         index_col=0).reset_index(drop=True)
 
 processed_dfs = []
@@ -96,6 +96,14 @@ training = TimeSeriesDataSet(
     #         transformation=None,
     #         method_kwargs={}
     # ),
+    # IF DEFAULT ENCODERNORMALIZER center = true,  method = standard
+    target_normalizer=EncoderNormalizer(
+        method='standard',
+        max_length=None,
+        center=False,
+        transformation=None,
+        method_kwargs={}
+    ),
     add_relative_time_idx=True,
     add_target_scales=True,
     add_encoder_length=True,

@@ -14,7 +14,7 @@ from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.tuner import Tuner
 from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesDataSet
-from pytorch_forecasting.data import GroupNormalizer
+from pytorch_forecasting.data import GroupNormalizer, EncoderNormalizer
 from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 import pickle
@@ -32,7 +32,7 @@ parser.add_argument('--max_encoder_length', type=int, default=5 * 2 * 24, help='
 parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
 parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
-parser.add_argument('--path', type=str, default='GroupNormalizer_r2_5d2d', help='TensorBoardLogger')
+parser.add_argument('--path', type=str, default='EncoderNormalizerrobust_r2_5d2d', help='TensorBoardLogger')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
 parser.add_argument('--quantile', type=float, default=0.95, help='threshold quantile')
 parser.add_argument('--threshold_scale', type=float, default=1, help='threshold scale')
@@ -83,15 +83,14 @@ training = TimeSeriesDataSet(
         "TankTemp",
     ],  # variance, volume, height, sales(-), delivery(+), temperature, "Del_tc", "Sales_Ini_tc",
     # target_normalizer=GroupNormalizer(
-    #     groups=["group_id"], transformation="relu"
+    #     groups=["group_id"], transformation="softplus"
     # ),  # use softplus and normalize by group
-    target_normalizer=GroupNormalizer(
-            method='standard',
-            groups=["group_id"],
-            center=True,
-            scale_by_group=True,
-            transformation=None,
-            method_kwargs={}
+    target_normalizer=EncoderNormalizer(
+        method='standard',
+        max_length=None,
+        center=False,
+        transformation=None,
+        method_kwargs={}
     ),
     add_relative_time_idx=True,
     add_target_scales=True,
