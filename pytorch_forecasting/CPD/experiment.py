@@ -86,9 +86,9 @@ training = TimeSeriesDataSet(
     #     groups=["group_id"], transformation="softplus"
     # ),  # use softplus and normalize by group
     target_normalizer=EncoderNormalizer(
-        method='standard',
+        method='robust',
         max_length=None,
-        center=False,
+        center=True,
         transformation=None,
         method_kwargs={}
     ),

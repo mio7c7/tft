@@ -1,12 +1,7 @@
 import os
 import warnings
-
 warnings.filterwarnings("ignore")  # avoid printing out absolute paths
-import copy
-from pathlib import Path
-import warnings
 import numpy as np
-import glob
 import pandas as pd
 import torch
 import lightning.pytorch as pl
@@ -17,15 +12,15 @@ from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesD
 from pytorch_forecasting.data import GroupNormalizer, EncoderNormalizer
 from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
-import pickle
 import argparse
 import matplotlib.pyplot as plt
 import math
 import sys
+import pylab
+from utils.AdaptiveThreshold import thresholding_algo
 sys.path.append('./')
 from ssa.btgym_ssa import SSA
 from evaluation import Evaluation_metrics
-
 parser = argparse.ArgumentParser(description='TFT on leakage datra')
 parser.add_argument('--max_prediction_length', type=int, default=2 * 24, help='forecast horizon')
 parser.add_argument('--max_encoder_length', type=int, default=3 * 2 * 24, help='past reference data')
@@ -39,7 +34,7 @@ parser.add_argument('--con', type=int, default=15, help='consecutive counter')
 parser.add_argument('--threshold_scale', type=float, default=2, help='threshold scale')
 parser.add_argument('--step', type=int, default=12, help='step')
 parser.add_argument('--model_path', type=str,
-                    default='/no_normaliser/trial_16/epoch=48.ckpt', help='model_path')
+                    default='/EncoderNormalizerrobust_r2_5d2d/trial_17/epoch=49.ckpt', help='model_path')
 parser.add_argument('--outfile', type=str, default='no_norm', help='step')
 args = parser.parse_args()
 
@@ -123,27 +118,6 @@ def loss(y_pred, target):
     losses = 2 * torch.cat(losses, dim=2)
     return losses
 
-def find_middle_values(values):
-    if len(values) == 0:
-        return []
-    consecutive_sequences = []
-    current_sequence = [values[0]]
-    for i in range(1, len(values)):
-        if values[i] - values[i-1] == 1:
-            current_sequence.append(values[i])
-        else:
-            if len(current_sequence) >= args.con:
-                middle_index = len(current_sequence) // 2
-                middle_value = current_sequence[middle_index]
-                consecutive_sequences.append(middle_value)
-            current_sequence = [values[i]]
-    # Check if there's a sequence at the end
-    if len(current_sequence) >= args.con:
-        middle_index = len(current_sequence) // 2
-        middle_value = current_sequence[middle_index]
-        consecutive_sequences.append(middle_value)
-    return consecutive_sequences
-
 if __name__ == '__main__':
     path = os.getcwd() + args.model_path
     best_tft = TemporalFusionTransformer.load_from_checkpoint(path)
@@ -154,6 +128,8 @@ if __name__ == '__main__':
     delays = []
     runtime = []
     error_margin = 864000
+    lag = 154
+    influence = 1
 
     if not os.path.exists(args.outfile):
         os.makedirs(args.outfile)
@@ -163,11 +139,11 @@ if __name__ == '__main__':
     for tank_sample_id in list(test_sequence['group_id'].unique()):
         if tank_sample_id in ['A043_2','A239_2','A441_2', 'B402_3', 'B402_4', 'F249_1', 'F257_2', 'F289_4', 'F406_1', 'J813_2']:
             continue
-        if tank_sample_id in dones:
-            continue
-        if os.path.isfile(args.outfile + '.npz'):
-            data = np.load(args.outfile + '.npz')
-            no_CPs, no_preds, no_TPS = data['no_CPs'], data['no_preds'], data['no_TPS']
+        # if tank_sample_id in dones:
+        #     continue
+        # if os.path.isfile(args.outfile + '.npz'):
+        #     data = np.load(args.outfile + '.npz')
+        #     no_CPs, no_preds, no_TPS = data['no_CPs'], data['no_preds'], data['no_TPS']
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
         tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
@@ -295,53 +271,79 @@ if __name__ == '__main__':
         # determine the results of prediction
         # scores = [0] * max_encoder_length + scores + [0] * max_prediction_length
         # thresholds = [0] * max_encoder_length + thresholds + [0] * max_prediction_length
-        preds = [idx+args.max_prediction_length//2 for idx in range(len(scores)) if scores[idx] > thresholds[idx]]
-        preds = find_middle_values(preds)
         scores = [tt.item() if tt != 0 else 0 for tt in scores]
-        thresholds = [tt.item() if tt != 0 else 0 for tt in thresholds]
+        try:
+            data_dict = np.load('errors.npy', allow_pickle=True).item()
+        except FileNotFoundError:
+            data_dict = {}
+        data_dict[tank_sample_id] = scores
+        np.save('errors.npy', data_dict)
 
-        no_CPs += 2
-        no_preds += len(preds)
-        mark = []
-        for j in preds:
-            timestamp = ts[j]
-            for l in gt_margin:
-                if timestamp >= l[0] and timestamp <= l[1]:
-                    if l not in mark:
-                        mark.append(l)
-                    else:
-                        no_preds -= 1
-                        continue
-                    no_TPS += 1
-                    delays.append(timestamp - l[2])
-        np.savez(args.outfile, no_CPs=no_CPs, no_preds=no_preds, no_TPS=no_TPS)
-        filtered = filtered + [0] * (len(ts) - len(filtered))
-        fig = plt.figure()
-        fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
-        ax[0].plot(ts.array, filtered)
-        ax[0].axvline(x=ts[startindex], color='green', linestyle='--')
-        ax[0].axvline(x=ts[stopindex], color='green', linestyle='--')
-        for cp in preds:
-            ax[0].axvline(x=ts[cp], color='purple', alpha=0.6)
-        ax[1].scatter(ts.array, scores)
-        ax[1].scatter(ts.array, thresholds)
-        plt.tight_layout()
-        plt.savefig(args.outfile + '/' + tank_sample_id + '.png')
-        plt.close('all')
-        del fig
+        # scores = [i for i in scores if i != 0]
+        # # Run algo with settings from above
+        # threshold = 15
+        # result = thresholding_algo(scores, lag=lag, threshold=threshold, influence=influence)
+        # fig = plt.figure()
+        # fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
+        # # Plot result
+        # ax[0].plot(np.arange(1, len(scores) + 1), scores)
+        #
+        # ax[0].plot(np.arange(1, len(scores) + 1),
+        #            result["avgFilter"], color="cyan", lw=2)
+        #
+        # ax[0].plot(np.arange(1, len(scores) + 1),
+        #            result["avgFilter"] + threshold * result["stdFilter"], color="green", lw=2)
+        #
+        # ax[0].plot(np.arange(1, len(scores) + 1),
+        #            result["avgFilter"] - threshold * result["stdFilter"], color="green", lw=2)
+        #
+        # ax[1].step(np.arange(1, len(scores) + 1), result["signals"], color="red", lw=2)
+        # ax[1].axis(ymin=-1.5,ymax=1.5)
+        # plt.tight_layout()
+        # plt.savefig(tank_sample_id + '.png')
 
-    rec = Evaluation_metrics.recall(no_TPS, no_CPs)
-    FAR = Evaluation_metrics.False_Alarm_Rate(no_preds, no_TPS)
-    prec = Evaluation_metrics.precision(no_TPS, no_preds)
-    f1score = Evaluation_metrics.F1_score(rec, prec)
-    f2score = Evaluation_metrics.F2_score(rec, prec)
-    # dd = Evaluation_metrics.detection_delay(delays)
-    print('recall: ', rec)
-    print('false alarm rate: ', FAR)
-    print('precision: ', prec)
-    print('F1 Score: ', f1score)
-    print('F2 Score: ', f2score)
-    # print('detection delay: ', dd)
-
-    npz_filename = args.outfile
-    np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score)
+    #     no_CPs += 2
+    #     no_preds += len(preds)
+    #     mark = []
+    #     for j in preds:
+    #         timestamp = ts[j]
+    #         for l in gt_margin:
+    #             if timestamp >= l[0] and timestamp <= l[1]:
+    #                 if l not in mark:
+    #                     mark.append(l)
+    #                 else:
+    #                     no_preds -= 1
+    #                     continue
+    #                 no_TPS += 1
+    #                 delays.append(timestamp - l[2])
+    #     np.savez(args.outfile, no_CPs=no_CPs, no_preds=no_preds, no_TPS=no_TPS)
+    #     filtered = filtered + [0] * (len(ts) - len(filtered))
+    #     fig = plt.figure()
+    #     fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
+    #     ax[0].plot(ts.array, filtered)
+    #     ax[0].axvline(x=ts[startindex], color='green', linestyle='--')
+    #     ax[0].axvline(x=ts[stopindex], color='green', linestyle='--')
+    #     for cp in preds:
+    #         ax[0].axvline(x=ts[cp], color='purple', alpha=0.6)
+    #     ax[1].scatter(ts.array, scores)
+    #     ax[1].scatter(ts.array, thresholds)
+    #     plt.tight_layout()
+    #     plt.savefig(args.outfile + '/' + tank_sample_id + '.png')
+    #     plt.close('all')
+    #     del fig
+    #
+    # rec = Evaluation_metrics.recall(no_TPS, no_CPs)
+    # FAR = Evaluation_metrics.False_Alarm_Rate(no_preds, no_TPS)
+    # prec = Evaluation_metrics.precision(no_TPS, no_preds)
+    # f1score = Evaluation_metrics.F1_score(rec, prec)
+    # f2score = Evaluation_metrics.F2_score(rec, prec)
+    # # dd = Evaluation_metrics.detection_delay(delays)
+    # print('recall: ', rec)
+    # print('false alarm rate: ', FAR)
+    # print('precision: ', prec)
+    # print('F1 Score: ', f1score)
+    # print('F2 Score: ', f2score)
+    # # print('detection delay: ', dd)
+    #
+    # npz_filename = args.outfile
+    # np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score)
