@@ -1,7 +1,6 @@
 import numpy as np
 import pylab
-from math import *
-
+import statistics
 
 def thresholding_algo(y, lag, threshold, influence):
     signals = np.zeros(len(y))
@@ -29,6 +28,26 @@ def thresholding_algo(y, lag, threshold, influence):
     return dict(signals = np.asarray(signals),
                 avgFilter = np.asarray(avgFilter),
                 stdFilter = np.asarray(stdFilter))
+
+def PTF_ONE(stream, k):
+    padding_value = 0
+    padded_stream = [padding_value] * (k - 1) + stream + [padding_value] * (k - 1)
+    transformed = [0]*len(stream)
+    for i in range(k, len(padded_stream)-k):
+        left_win = [padded_stream[i] - j for j in padded_stream[i-k:i]]
+        right_win = [padded_stream[i] - j for j in padded_stream[i:i+k]]
+        transformed[i-k] = (max(left_win) + max(right_win))/2
+    return transformed
+
+def PTF_TWO(stream, k):
+    padding_value = 0
+    padded_stream = [padding_value] * (k - 1) + stream + [padding_value] * (k - 1)
+    transformed = [0]*len(stream)
+    for i in range(k, len(padded_stream)-k):
+        left_win = [padded_stream[i] - j for j in padded_stream[i - k:i]]
+        right_win = [padded_stream[i] - j for j in padded_stream[i:i + k]]
+        transformed[i-k] = (statistics.mean(left_win) + statistics.mean(right_win))/2
+    return transformed
 
 class HDDM_A():
     def __init__(self, drift_confidence=0.001, warning_confidence=0.005):
@@ -113,7 +132,6 @@ class HDDM_A():
     def detected_warning_zone(self):
         return self.in_warning_zone
 
-
 if __name__ == '__main__':
     hddm_a = HDDM_A()
     data_stream = np.random.randint(2, size=2000)
@@ -126,6 +144,8 @@ if __name__ == '__main__':
         if hddm_a.detected_change():
             print('Change has been detected in data: ' + str(data_stream[i]) + ' - of index: ' + str(i))
 
+    # Run algo with settings from above
+    result = thresholding_algo(y, lag=lag, threshold=threshold, influence=influence)
 
     # y = np.array(
     #     [1, 1, 1.1, 1, 0.9, 1, 1, 1.1, 1, 0.9, 1, 1.1, 1, 1, 0.9, 1, 1, 1.1, 1, 1, 1, 1, 1.1, 0.9, 1, 1.1, 1, 1, 0.9,
