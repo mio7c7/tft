@@ -1,6 +1,8 @@
 import numpy as np
 import pylab
 import statistics
+from math import *
+import matplotlib.pyplot as plt
 
 def thresholding_algo(y, lag, threshold, influence):
     signals = np.zeros(len(y))
@@ -133,19 +135,37 @@ class HDDM_A():
         return self.in_warning_zone
 
 if __name__ == '__main__':
-    hddm_a = HDDM_A()
-    data_stream = np.random.randint(2, size=2000)
-    for i in range(999, 1500):
-        data_stream[i] = 0
-    for i in range(2000):
-        hddm_a.add_element(data_stream[i])
-        if hddm_a.detected_warning_zone():
-            print('Warning zone has been detected in data: ' + str(data_stream[i]) + ' - of index: ' + str(i))
-        if hddm_a.detected_change():
-            print('Change has been detected in data: ' + str(data_stream[i]) + ' - of index: ' + str(i))
+    data_dict = np.load('C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/errors.npy', allow_pickle=True).item()
+    for key, value in data_dict.items():
+        transformed = PTF_ONE(value, k=48)
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 
-    # Run algo with settings from above
-    result = thresholding_algo(y, lag=lag, threshold=threshold, influence=influence)
+        # Plot on the first subplot
+        ax1.plot(value, label='errors', color='blue')
+        ax1.set_title('Plot 1')
+        ax1.legend()
+
+        # Plot on the second subplot
+        ax2.plot(transformed, label='trasnformed', color='red')
+        ax2.set_title('Plot 2')
+        ax2.legend()
+
+        # Adjust layout
+        plt.tight_layout()
+
+        # Show the plot
+        plt.savefig(key+'_2.png')
+
+    # hddm_a = HDDM_A()
+    # data_stream = np.random.randint(2, size=2000)
+    # for i in range(999, 1500):
+    #     data_stream[i] = 0
+    # for i in range(2000):
+    #     hddm_a.add_element(data_stream[i])
+    #     if hddm_a.detected_warning_zone():
+    #         print('Warning zone has been detected in data: ' + str(data_stream[i]) + ' - of index: ' + str(i))
+    #     if hddm_a.detected_change():
+    #         print('Change has been detected in data: ' + str(data_stream[i]) + ' - of index: ' + str(i))
 
     # y = np.array(
     #     [1, 1, 1.1, 1, 0.9, 1, 1, 1.1, 1, 0.9, 1, 1.1, 1, 1, 0.9, 1, 1, 1.1, 1, 1, 1, 1, 1.1, 0.9, 1, 1.1, 1, 1, 0.9,

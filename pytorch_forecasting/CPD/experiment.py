@@ -32,7 +32,7 @@ parser.add_argument('--max_encoder_length', type=int, default=5 * 2 * 24, help='
 parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
 parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
-parser.add_argument('--path', type=str, default='EncoderNormalizerrobust_r2_5d2d', help='TensorBoardLogger')
+parser.add_argument('--path', type=str, default='notimeidx_r2_5d2d', help='TensorBoardLogger')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
 parser.add_argument('--quantile', type=float, default=0.95, help='threshold quantile')
 parser.add_argument('--threshold_scale', type=float, default=1, help='threshold scale')
@@ -74,7 +74,7 @@ training = TimeSeriesDataSet(
     # tank max height, tank max volume, no. of pumps attached to the tank
     time_varying_known_categoricals=["Time_of_day"],
     # season, month, remove "Month", "Year", "Season" if use only a month of data for training
-    time_varying_known_reals=["time_idx"],  # time_idx,
+    time_varying_known_reals=[],  # time_idx,
     time_varying_unknown_categoricals=[],  # period (idle, transaction, delivery)
     time_varying_unknown_reals=[
         "Var_tc_readjusted",
@@ -85,13 +85,13 @@ training = TimeSeriesDataSet(
     # target_normalizer=GroupNormalizer(
     #     groups=["group_id"], transformation="softplus"
     # ),  # use softplus and normalize by group
-    target_normalizer=EncoderNormalizer(
-        method='robust',
-        max_length=None,
-        center=True,
-        transformation=None,
-        method_kwargs={}
-    ),
+    # target_normalizer=EncoderNormalizer(
+    #     method='robust',
+    #     max_length=None,
+    #     center=True,
+    #     transformation=None,
+    #     method_kwargs={}
+    # ),
     add_relative_time_idx=True,
     add_target_scales=True,
     add_encoder_length=True,
@@ -117,7 +117,7 @@ study = optimize_hyperparameters(
     hidden_continuous_size_range=(4, 64),
     attention_head_size_range=(1, 4),
     learning_rate_range=(0.0001, 0.1),
-    dropout_range=(0.1, 0.3),
+    dropout_range=(0.1, 0.5),
     trainer_kwargs=dict(limit_train_batches=30),
     reduce_on_plateau_patience=4,
     use_learning_rate_finder=False,  # use Optuna to find ideal learning rate or use in-built learning rate finder

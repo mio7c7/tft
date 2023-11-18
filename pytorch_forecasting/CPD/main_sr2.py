@@ -78,7 +78,7 @@ training = TimeSeriesDataSet(
     # tank max height, tank max volume, no. of pumps attached to the tank
     time_varying_known_categoricals=["Time_of_day"],
     # season, month, remove "Month", "Year", "Season" if use only a month of data for training
-    time_varying_known_reals=["time_idx"],  # time_idx,
+    time_varying_known_reals=[],  # time_idx,
     time_varying_unknown_categoricals=[],  # period (idle, transaction, delivery)
     time_varying_unknown_reals=[
         "Var_tc_readjusted",
@@ -89,13 +89,13 @@ training = TimeSeriesDataSet(
     # target_normalizer=GroupNormalizer(
     #     groups=["group_id"], transformation="softplus"
     # ),  # use softplus and normalize by group
-    target_normalizer=EncoderNormalizer(
-        method='robust',
-        max_length=None,
-        center=True,
-        transformation=None,
-        method_kwargs={}
-    ),
+    # target_normalizer=EncoderNormalizer(
+    #     method='robust',
+    #     max_length=None,
+    #     center=True,
+    #     transformation=None,
+    #     method_kwargs={}
+    # ),
     # target_normalizer=EncoderNormalizer(
     #     method='robust',
     #     center=False
@@ -235,8 +235,8 @@ if __name__ == '__main__':
                     resmean += delta / (ctr + i1 + training_cutoff)
                     M2 += delta * (residual[i1] - resmean)
                     stdev = math.sqrt(M2 / (ctr + i1 + training_cutoff - 1))
-                    threshold_upper = resmean + 2 * stdev
-                    threshold_lower = resmean - 2 * stdev
+                    threshold_upper = resmean + 1.5 * stdev
+                    threshold_lower = resmean - 1.5 * stdev
 
                     if (residual[i1] <= threshold_upper) and (residual[i1] >= threshold_lower):
                         filtered.append(new[i1])

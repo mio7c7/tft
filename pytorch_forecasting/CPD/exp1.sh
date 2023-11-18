@@ -11,5 +11,5 @@
 # Run the Python script
 source venv/Scripts/activate
 #python pytorch_forecasting/CPD/experiment.py --path 'R2_nonorm'
-#python pytorch_forecasting/CPD/main_sr2.py --max_encoder_length 240 --quantile 0.975 --threshold_scale 1.25 --step 50 --outfile '975_125_15_5d_r2' --model_path '/no_normaliser_r2_5d/trial_6/epoch=47.ckpt'
-python pytorch_forecasting/CPD/ATtest.py --max_encoder_length 240 --max_prediction_length 96 --quantile 0.975 --threshold_scale 1.25 --step 50 --outfile '975_125_15_ENR5d2d_r2' --model_path '/EncoderNormalizerrobust_r2_5d2d/trial_17/epoch=49.ckpt'
+python pytorch_forecasting/CPD/main_sr2.py --max_encoder_length 240 --quantile 0.975 --threshold_scale 1.25 --step 50 --outfile '975_125_15_notimeidx_r2' --model_path '/notimeidx_r2_5d2d/trial_15/epoch=49.ckpt'
+#python pytorch_forecasting/CPD/ATtest.py --max_encoder_length 240 --max_prediction_length 96 --quantile 0.975 --threshold_scale 1.25 --step 50 --outfile '975_125_15_ENR5d2d_r2' --model_path '/EncoderNormalizerrobust_r2_5d2d/trial_17/epoch=49.ckpt'
