@@ -1,5 +1,6 @@
 import numpy as np
 import pylab
+import statistics
 
 def thresholding_algo(y, lag, threshold, influence):
     signals = np.zeros(len(y))
@@ -27,6 +28,26 @@ def thresholding_algo(y, lag, threshold, influence):
     return dict(signals = np.asarray(signals),
                 avgFilter = np.asarray(avgFilter),
                 stdFilter = np.asarray(stdFilter))
+
+def PTF_ONE(stream, k):
+    padding_value = 0
+    padded_stream = [padding_value] * (k - 1) + stream + [padding_value] * (k - 1)
+    transformed = [0]*len(stream)
+    for i in range(k, len(padded_stream)-k):
+        left_win = [padded_stream[i] - j for j in padded_stream[i-k:i]]
+        right_win = [padded_stream[i] - j for j in padded_stream[i:i+k]]
+        transformed[i-k] = (max(left_win) + max(right_win))/2
+    return transformed
+
+def PTF_TWO(stream, k):
+    padding_value = 0
+    padded_stream = [padding_value] * (k - 1) + stream + [padding_value] * (k - 1)
+    transformed = [0]*len(stream)
+    for i in range(k, len(padded_stream)-k):
+        left_win = [padded_stream[i] - j for j in padded_stream[i - k:i]]
+        right_win = [padded_stream[i] - j for j in padded_stream[i:i + k]]
+        transformed[i-k] = (statistics.mean(left_win) + statistics.mean(right_win))/2
+    return transformed
 
 
 if __name__ == '__main__':
