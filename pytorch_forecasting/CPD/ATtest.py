@@ -68,7 +68,7 @@ training = TimeSeriesDataSet(
     max_encoder_length=max_encoder_length,
     min_prediction_length=max_prediction_length,
     max_prediction_length=max_prediction_length,
-    static_categoricals=["group_id"],  # tank id, tank location state
+    static_categoricals=["group_id", "Site_No"],  # tank id, tank location state
     static_reals=["tank_max_height", "tank_max_volume"],
     # tank max height, tank max volume, no. of pumps attached to the tank
     time_varying_known_categoricals=["Time_of_day"],

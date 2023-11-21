@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=my_python_job    # Job name
-#SBATCH --output=output_r2.log          # Output file
-#SBATCH --error=error_r2.log            # Error file
+#SBATCH --output=output_atest.log          # Output file
+#SBATCH --error=error_atest.log            # Error file
 #SBATCH --partition=SCT   # Specify a partition (e.g., your_partition)
 #SBATCH --nodes=1                   # Number of nodes
 #SBATCH --ntasks-per-node=4         # Number of tasks
@@ -11,5 +11,5 @@
 # Run the Python script
 source venv/Scripts/activate
 #python pytorch_forecasting/CPD/experiment.py --path 'R2_nonorm'
-python pytorch_forecasting/CPD/main_sr2.py --max_encoder_length 240 --quantile 0.975 --threshold_scale 1.25 --step 50 --outfile '975_125_15_notimeidx_r2' --model_path '/notimeidx_r2_5d2d/trial_15/epoch=49.ckpt'
-#python pytorch_forecasting/CPD/ATtest.py --max_encoder_length 240 --max_prediction_length 96 --quantile 0.975 --threshold_scale 1.25 --step 50 --outfile '975_125_15_ENR5d2d_r2' --model_path '/EncoderNormalizerrobust_r2_5d2d/trial_17/epoch=49.ckpt'
+#python pytorch_forecasting/CPD/main_sr2.py --max_encoder_length 336 --quantile 0.975 --threshold_scale 1.25 --step 50 --outfile '975_125_25_default' --model_path '/default_r2_7d2d/trial_23/epoch=96.ckpt'
+python pytorch_forecasting/CPD/ATtest.py --max_encoder_length 336 --max_prediction_length 96 --quantile 0.975 --threshold_scale 1.25 --step 50 --outfile 'atest' --model_path '/default_r2_7d2d/trial_23/epoch=96.ckpt'

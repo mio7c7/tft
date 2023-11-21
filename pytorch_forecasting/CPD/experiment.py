@@ -28,11 +28,11 @@ from ssa.btgym_ssa import SSA
 
 parser = argparse.ArgumentParser(description='TFT on leakage datra')
 parser.add_argument('--max_prediction_length', type=int, default=2 * 24, help='forecast horizon')
-parser.add_argument('--max_encoder_length', type=int, default=5 * 2 * 24, help='past reference data')
+parser.add_argument('--max_encoder_length', type=int, default=7 * 2 * 24, help='past reference data')
 parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
 parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
-parser.add_argument('--path', type=str, default='notimeidx_r2_5d2d', help='TensorBoardLogger')
+parser.add_argument('--path', type=str, default='default_r2_7d2d', help='TensorBoardLogger')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
 parser.add_argument('--quantile', type=float, default=0.95, help='threshold quantile')
 parser.add_argument('--threshold_scale', type=float, default=1, help='threshold scale')
@@ -69,12 +69,12 @@ training = TimeSeriesDataSet(
     max_encoder_length=max_encoder_length,
     min_prediction_length=max_prediction_length,
     max_prediction_length=max_prediction_length,
-    static_categoricals=["group_id"],  # tank id, tank location state
+    static_categoricals=["group_id", "Site_No"],  # tank id, tank location state
     static_reals=["tank_max_height", "tank_max_volume"],
     # tank max height, tank max volume, no. of pumps attached to the tank
     time_varying_known_categoricals=["Time_of_day"],
     # season, month, remove "Month", "Year", "Season" if use only a month of data for training
-    time_varying_known_reals=[],  # time_idx,
+    time_varying_known_reals=["time_idx"],  # time_idx,
     time_varying_unknown_categoricals=[],  # period (idle, transaction, delivery)
     time_varying_unknown_reals=[
         "Var_tc_readjusted",
@@ -98,7 +98,7 @@ training = TimeSeriesDataSet(
     allow_missing_timesteps=True
 )
 validation = TimeSeriesDataSet.from_dataset(training, final_df, predict=True, stop_randomization=True)
-batch_size = 128  # set this between 32 to 128
+batch_size = 64  # set this between 32 to 128
 train_dataloader = training.to_dataloader(train=True, batch_size=batch_size, num_workers=0)
 val_dataloader = validation.to_dataloader(train=False, batch_size=batch_size * 10, num_workers=0)
 
@@ -110,8 +110,8 @@ study = optimize_hyperparameters(
     train_dataloader,
     val_dataloader,
     model_path=args.path,
-    n_trials=20,
-    max_epochs=50,
+    n_trials=25,
+    max_epochs=100,
     gradient_clip_val_range=(0.01, 1.0),
     hidden_size_range=(4, 64),
     hidden_continuous_size_range=(4, 64),

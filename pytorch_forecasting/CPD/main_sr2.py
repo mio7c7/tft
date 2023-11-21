@@ -73,12 +73,12 @@ training = TimeSeriesDataSet(
     max_encoder_length=max_encoder_length,
     min_prediction_length=max_prediction_length,
     max_prediction_length=max_prediction_length,
-    static_categoricals=["group_id"],  # tank id, tank location state
+    static_categoricals=["group_id", "Site_No"],  # tank id, tank location state
     static_reals=["tank_max_height", "tank_max_volume"],
     # tank max height, tank max volume, no. of pumps attached to the tank
     time_varying_known_categoricals=["Time_of_day"],
     # season, month, remove "Month", "Year", "Season" if use only a month of data for training
-    time_varying_known_reals=[],  # time_idx,
+    time_varying_known_reals=["time_idx"],  # time_idx,
     time_varying_unknown_categoricals=[],  # period (idle, transaction, delivery)
     time_varying_unknown_reals=[
         "Var_tc_readjusted",
@@ -235,8 +235,8 @@ if __name__ == '__main__':
                     resmean += delta / (ctr + i1 + training_cutoff)
                     M2 += delta * (residual[i1] - resmean)
                     stdev = math.sqrt(M2 / (ctr + i1 + training_cutoff - 1))
-                    threshold_upper = resmean + 1.5 * stdev
-                    threshold_lower = resmean - 1.5 * stdev
+                    threshold_upper = resmean + 2 * stdev
+                    threshold_lower = resmean - 2 * stdev
 
                     if (residual[i1] <= threshold_upper) and (residual[i1] >= threshold_lower):
                         filtered.append(new[i1])

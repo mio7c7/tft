@@ -135,9 +135,9 @@ class HDDM_A():
         return self.in_warning_zone
 
 if __name__ == '__main__':
-    data_dict = np.load('C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/errors.npy', allow_pickle=True).item()
+    data_dict = np.load('errors.npy', allow_pickle=True).item()
     for key, value in data_dict.items():
-        transformed = PTF_ONE(value, k=48)
+        transformed = PTF_TWO(value, k=48)
         fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 
         # Plot on the first subplot

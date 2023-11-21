@@ -33,6 +33,7 @@ for i in glob.glob(folder):
     tank_max_volume = data["ClosingHeight_readjusted"].max()
     data['tank_max_height'] = tank_max_height
     data['tank_max_volume'] = tank_max_volume
+    data['Site_No'] = group[:4]
     data['Month'] = data['Month'].astype(str)
     data['Year'] = data['Year'].astype(str)
     data['period'] = data['period'].astype(str)

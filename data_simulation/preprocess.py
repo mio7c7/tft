@@ -23,19 +23,19 @@ for i in glob.glob(folder):
         if not flag:
             if row['Sales_Ini'] != 0 and row['Sales'] == 0.0:
                 flag = True
-                cand.append((idx, row['Sales_Ini'], row['Sales_Ini_tc']))
+                cand.append((idx, row['Sales_Ini'], row['Sales_Ini_tc'], row['Var_tc']))
             else:
                 pass
         else:
             if row['Sales_Ini'] != 0 and row['Sales'] == 0.0:
-                cand.append((idx, row['Sales_Ini'], row['Sales_Ini_tc']))
+                cand.append((idx, row['Sales_Ini'], row['Sales_Ini_tc'], row['Var_tc']))
             else:
-                cand.append((idx, row['Sales_Ini'], row['Sales_Ini_tc']))
+                cand.append((idx, row['Sales_Ini'], row['Sales_Ini_tc'], row['Var_tc']))
                 sum_sales = sum(item[1] for item in cand)
                 sum_sales_tc = sum(item[2] for item in cand)
+                sum_var_tc = sum(item[3] for item in cand)
                 sum_var = row['Var']
-                sum_var_tc = row['Var_tc']
-                for t, sales, sales_tc in cand:
+                for t, sales, sales_tc, _ in cand:
                     fs_30mins.at[t, 'Var_red'] = sum_var*sales/sum_sales
                     fs_30mins.at[t, 'Var_tc_red'] = sum_var_tc*sales_tc/sum_sales_tc
                 flag = False

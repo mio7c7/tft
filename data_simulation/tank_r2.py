@@ -83,10 +83,14 @@ for i in glob.glob(folder):
     grade = i[i.find('_')-1]
     tck = 0.000843811 if grade == 4 else 0.00125135
     tl_grounds = simulate_info[(simulate_info['Site'] == Site) & (simulate_info['Tank'] == int(tank))]
-    if Site != 'Q152' and FLAG:
-        continue
+    if Site == 'B402' and tank == '5':
+        print(Site, tank)
     else:
-        FLAG = False
+        continue
+    # if Site != 'Q152' and FLAG:
+    #     continue
+    # else:
+    #     FLAG = False
 
     k = 'G:/Meter error/Pump Cal report/Data/' + Site + '/' + Site + '_ACal.RDATA'
     robjects.r['load'](k)
@@ -118,13 +122,18 @@ for i in glob.glob(folder):
                       filename.endswith('.csv') and '_inventories_' in filename]
     file_path = os.path.join(site_dir, inventory_file[0])
     inventory_df = pd.read_csv(file_path, index_col=0).reset_index(drop=True)
+    try:
+        inventory_df['tank_identifier'] = pd.to_numeric(inventory_df['tank_identifier'], errors='coerce').fillna(
+            0).astype(int)
+    except ValueError as e:
+        print(f"Error: {e}")
     inventory_df = inventory_df[(inventory_df['tank_identifier'] == int(tank))]
     inventory_df = inventory_df.drop_duplicates()
     fs_30mins = fs_30mins.drop_duplicates()
     inventory_df = inventory_df.drop_duplicates(subset='event_time', keep='first')
     fs_30mins = fs_30mins.drop_duplicates(subset='Time', keep='first')
     inventory_30ms = fs_30mins.merge(inventory_df[['event_time', 'tc_volume', 'height']], left_on='Time',
-                                     right_on='event_time', how='left')
+                                     right_on='event_time', how='left') #original left
     new_column_names = {
         'tc_volume': 'ClosingStock_Ini_tc',
         'height': 'ClosingHeight_Ini'
