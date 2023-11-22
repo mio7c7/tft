@@ -3,6 +3,7 @@ import pylab
 import statistics
 from math import *
 import matplotlib.pyplot as plt
+from scipy.stats import norm
 
 def thresholding_algo(y, lag, threshold, influence):
     signals = np.zeros(len(y))
@@ -50,6 +51,36 @@ def PTF_TWO(stream, k):
         right_win = [padded_stream[i] - j for j in padded_stream[i:i + k]]
         transformed[i-k] = (statistics.mean(left_win) + statistics.mean(right_win))/2
     return transformed
+
+def MAM(transformed, seg_size):
+    """
+    Here, a segment with pre-defined number of points is created around each point. Statistics of the segment mainly
+    mean, RMS and standard deviation are computed, and threshold is calculated based on these parameters.
+    """
+    padding_value = 0
+    padded_stream = [padding_value] * (seg_size - 1) + transformed
+    means, stds, rmss = [0]*len(transformed), [0]*len(transformed), [0]*len(transformed)
+    for i in range(seg_size, len(padded_stream)):
+        left_win = padded_stream[i - seg_size:i]
+        means[i - seg_size] = statistics.mean(left_win)
+        stds[i - seg_size] = statistics.stdev(left_win)
+        rmss[i - seg_size] = statistics.mean(left_win) + 4 * statistics.stdev(left_win)
+        # rmss[i - seg_size] = np.sqrt(sum([(x - statistics.mean(left_win))**2 for x in left_win]))
+    return means, stds, rmss
+
+def NAB(stream, long_ws, short_ws):
+    padding_value = 0
+    padded_stream = [padding_value] * (long_ws - 1) + stream
+    anomaly_scores = [0] * len(stream)
+    for i in range(long_ws, len(padded_stream)):
+        long_win = padded_stream[i - long_ws:i]
+        short_win = padded_stream[i - short_ws:i]
+        mean_l = statistics.mean(long_win)
+        var_l = statistics.stdev(long_win)
+        mean_s = statistics.mean(short_win)
+        anomaly_L = 1 - norm.sf(mean_s, loc=mean_l, scale=var_l)
+        anomaly_scores[i - long_ws] = anomaly_L
+    return anomaly_scores
 
 class HDDM_A():
     def __init__(self, drift_confidence=0.001, warning_confidence=0.005):
@@ -138,6 +169,7 @@ if __name__ == '__main__':
     data_dict = np.load('errors.npy', allow_pickle=True).item()
     for key, value in data_dict.items():
         transformed = PTF_TWO(value, k=48)
+        means, stds, rmss = MAM(transformed, seg_size=48)
         fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 
         # Plot on the first subplot
@@ -147,6 +179,15 @@ if __name__ == '__main__':
 
         # Plot on the second subplot
         ax2.plot(transformed, label='trasnformed', color='red')
+        ax2.plot(means, label='mean', color='blue')
+        ax2.plot(stds, label='standard deviation', color='green')
+        ax2.plot(rmss, label='threshold', color='orange')
+        mark = []
+        for index, value in enumerate(transformed):
+            if value > rmss[index]:
+                mark.append(index)
+        trans = [transformed[i] for i in mark]
+        ax2.plot(mark, trans, marker="o", ls="", ms=3, color='black')
         ax2.set_title('Plot 2')
         ax2.legend()
 
@@ -154,7 +195,7 @@ if __name__ == '__main__':
         plt.tight_layout()
 
         # Show the plot
-        plt.savefig(key+'_2.png')
+        plt.savefig(key+'.png')
 
     # hddm_a = HDDM_A()
     # data_stream = np.random.randint(2, size=2000)

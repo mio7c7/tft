@@ -139,6 +139,12 @@ if __name__ == '__main__':
     for tank_sample_id in list(test_sequence['group_id'].unique()):
         if tank_sample_id in ['A043_2','A239_2','A441_2', 'B402_3', 'B402_4', 'F249_1', 'F257_2', 'F289_4', 'F406_1', 'J813_2']:
             continue
+        try:
+            data_dict = np.load('errors.npy', allow_pickle=True).item()
+        except FileNotFoundError:
+            data_dict = {}
+        if tank_sample_id in data_dict.keys():
+            continue
         # if tank_sample_id in dones:
         #     continue
         # if os.path.isfile(args.outfile + '.npz'):
@@ -272,10 +278,6 @@ if __name__ == '__main__':
         # scores = [0] * max_encoder_length + scores + [0] * max_prediction_length
         # thresholds = [0] * max_encoder_length + thresholds + [0] * max_prediction_length
         scores = [tt.item() if tt != 0 else 0 for tt in scores]
-        try:
-            data_dict = np.load('errors.npy', allow_pickle=True).item()
-        except FileNotFoundError:
-            data_dict = {}
         data_dict[tank_sample_id] = scores
         np.save('errors.npy', data_dict)
 
