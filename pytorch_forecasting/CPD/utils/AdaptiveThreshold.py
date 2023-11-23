@@ -3,6 +3,7 @@ import pylab
 import statistics
 from math import *
 import matplotlib.pyplot as plt
+import pandas as pd
 from scipy.stats import norm
 
 def thresholding_algo(y, lag, threshold, influence):
@@ -77,8 +78,12 @@ def NAB(stream, long_ws, short_ws):
         short_win = padded_stream[i - short_ws:i]
         mean_l = statistics.mean(long_win)
         var_l = statistics.stdev(long_win)
+        if var_l == 0:
+            anomaly_scores[i - long_ws] = 0
+            continue
         mean_s = statistics.mean(short_win)
-        anomaly_L = 1 - norm.sf(mean_s, loc=mean_l, scale=var_l)
+        z_score = (mean_s-mean_l)/var_l
+        anomaly_L = 1 - norm.sf(z_score)
         anomaly_scores[i - long_ws] = anomaly_L
     return anomaly_scores
 
@@ -167,10 +172,28 @@ class HDDM_A():
 
 if __name__ == '__main__':
     data_dict = np.load('errors.npy', allow_pickle=True).item()
+    tlgrouths = pd.read_csv('pytorch_forecasting/CPD/bottom02_info.csv',
+                            index_col=0).reset_index(drop=True)
+    test_sequence = pd.read_csv('pytorch_forecasting/CPD/tl.csv')
+    test_sequence = test_sequence[test_sequence['period'] == 0]
+    training_cutoff = 2000 - 96
     for key, value in data_dict.items():
-        transformed = PTF_TWO(value, k=48)
-        means, stds, rmss = MAM(transformed, seg_size=48)
-        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+        site_id = key[:4]
+        tank_id = key[-1]
+        tank_info = tlgrouths[(tlgrouths['Site'] == site_id) & (tlgrouths['Tank'] == int(tank_id))]
+        tank_sequence = test_sequence[(test_sequence['group_id'] == key)]
+        test_seq = tank_sequence.iloc[training_cutoff:]
+        test_seq = test_seq.reset_index(drop=True)
+        test_seq['time_idx'] = test_seq.index
+
+        startdate = tank_info.iloc[0]['Start_date']
+        stopdate = tank_info.iloc[0]['Stop_date']
+        temp_df = test_seq[test_seq['Time_DN'] > startdate]
+        startindex = temp_df.iloc[0]['time_idx']
+        temp_df = test_seq[test_seq['Time_DN'] > stopdate]
+        stopindex = temp_df.iloc[0]['time_idx']
+        anomaly_scores = NAB(value, 500, 50)
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12, 6))
 
         # Plot on the first subplot
         ax1.plot(value, label='errors', color='blue')
@@ -178,16 +201,7 @@ if __name__ == '__main__':
         ax1.legend()
 
         # Plot on the second subplot
-        ax2.plot(transformed, label='trasnformed', color='red')
-        ax2.plot(means, label='mean', color='blue')
-        ax2.plot(stds, label='standard deviation', color='green')
-        ax2.plot(rmss, label='threshold', color='orange')
-        mark = []
-        for index, value in enumerate(transformed):
-            if value > rmss[index]:
-                mark.append(index)
-        trans = [transformed[i] for i in mark]
-        ax2.plot(mark, trans, marker="o", ls="", ms=3, color='black')
+        ax2.plot(anomaly_scores, label='anomaly scores', color='red')
         ax2.set_title('Plot 2')
         ax2.legend()
 
@@ -195,7 +209,36 @@ if __name__ == '__main__':
         plt.tight_layout()
 
         # Show the plot
-        plt.savefig(key+'.png')
+        plt.savefig(key + '_NAB.png')
+    # for key, value in data_dict.items():
+    #     transformed = PTF_TWO(value, k=48)
+    #     means, stds, rmss = MAM(transformed, seg_size=48)
+    #     fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+    #
+    #     # Plot on the first subplot
+    #     ax1.plot(value, label='errors', color='blue')
+    #     ax1.set_title('Plot 1')
+    #     ax1.legend()
+    #
+    #     # Plot on the second subplot
+    #     ax2.plot(transformed, label='trasnformed', color='red')
+    #     ax2.plot(means, label='mean', color='blue')
+    #     ax2.plot(stds, label='standard deviation', color='green')
+    #     ax2.plot(rmss, label='threshold', color='orange')
+    #     mark = []
+    #     for index, value in enumerate(transformed):
+    #         if value > rmss[index]:
+    #             mark.append(index)
+    #     trans = [transformed[i] for i in mark]
+    #     ax2.plot(mark, trans, marker="o", ls="", ms=3, color='black')
+    #     ax2.set_title('Plot 2')
+    #     ax2.legend()
+    #
+    #     # Adjust layout
+    #     plt.tight_layout()
+    #
+    #     # Show the plot
+    #     plt.savefig(key+'.png')
 
     # hddm_a = HDDM_A()
     # data_stream = np.random.randint(2, size=2000)
