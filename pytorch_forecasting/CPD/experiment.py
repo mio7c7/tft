@@ -27,8 +27,8 @@ from ssa.btgym_ssa import SSA
 
 
 parser = argparse.ArgumentParser(description='TFT on leakage datra')
-parser.add_argument('--max_prediction_length', type=int, default=2 * 24, help='forecast horizon')
-parser.add_argument('--max_encoder_length', type=int, default=7 * 2 * 24, help='past reference data')
+parser.add_argument('--max_prediction_length', type=int, default=2 * 2 * 24, help='forecast horizon')
+parser.add_argument('--max_encoder_length', type=int, default=5 * 2 * 24, help='past reference data')
 parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
 parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
@@ -42,7 +42,6 @@ args = parser.parse_args()
 max_prediction_length = args.max_prediction_length
 max_encoder_length = args.max_encoder_length
 test_sequence = pd.read_csv('pytorch_forecasting/CPD/tl.csv')
-# test_sequence = test_sequence.drop(columns=["Month", "Year", "Season"])
 test_sequence = test_sequence[test_sequence['period'] == 0]
 test_sequence['period'] = test_sequence['period'].astype(str)
 TRAINSIZE = args.trainsize
@@ -53,7 +52,6 @@ data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
 
 processed_dfs = []
 groups = data.groupby('group_id')
-window_size = 10
 for group_id, group_df in groups:
     group_df = group_df.reset_index(drop=True)
     group_df['time_idx'] = group_df.index
@@ -82,16 +80,6 @@ training = TimeSeriesDataSet(
         "ClosingStock_tc_readjusted",
         "TankTemp",
     ],  # variance, volume, height, sales(-), delivery(+), temperature, "Del_tc", "Sales_Ini_tc",
-    # target_normalizer=GroupNormalizer(
-    #     groups=["group_id"], transformation="softplus"
-    # ),  # use softplus and normalize by group
-    # target_normalizer=EncoderNormalizer(
-    #     method='robust',
-    #     max_length=None,
-    #     center=True,
-    #     transformation=None,
-    #     method_kwargs={}
-    # ),
     add_relative_time_idx=True,
     add_target_scales=True,
     add_encoder_length=True,

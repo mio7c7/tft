@@ -28,6 +28,7 @@ parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
 parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
 parser.add_argument('--path', type=str, default='no_norm', help='TensorBoardLogger')
+parser.add_argument('--method', type=str, default='mae', help='method')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
 parser.add_argument('--quantile', type=float, default=0.985, help='threshold quantile')
 parser.add_argument('--con', type=int, default=15, help='consecutive counter')
@@ -49,6 +50,9 @@ data = test_sequence[lambda x: x.time_idx <= TRAINSIZE + VALIDSIZE]
 data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
 tlgrouths = pd.read_csv('pytorch_forecasting/CPD/bottom02_info.csv',
                         index_col=0).reset_index(drop=True)
+test_sequence = test_sequence[['Time','Time_DN','time_idx', 'Var_tc_readjusted', 'group_id', 'Site_No',
+                     'tank_max_height', 'tank_max_volume', 'Time_of_day', 'ClosingHeight_tc_readjusted',
+                     'ClosingStock_tc_readjusted', 'TankTemp']]
 
 processed_dfs = []
 groups = data.groupby('group_id')
@@ -58,6 +62,9 @@ for group_id, group_df in groups:
     group_df['time_idx'] = group_df.index
     processed_dfs.append(group_df)
 final_df = pd.concat(processed_dfs, ignore_index=True)
+final_df = final_df[['time_idx', 'Var_tc_readjusted', 'group_id', 'Site_No',
+                     'tank_max_height', 'tank_max_volume', 'Time_of_day', 'ClosingHeight_tc_readjusted',
+                     'ClosingStock_tc_readjusted', 'TankTemp']]
 
 training = TimeSeriesDataSet(
     final_df[lambda x: x.time_idx <= 3750],
@@ -100,22 +107,38 @@ training = TimeSeriesDataSet(
     add_encoder_length=True,
     allow_missing_timesteps=True
 )
-validation = TimeSeriesDataSet.from_dataset(training, final_df, predict=True, stop_randomization=True)
+# validation = TimeSeriesDataSet.from_dataset(training, final_df, predict=True, stop_randomization=True)
 batch_size = 128  # set this between 32 to 128
-train_dataloader = training.to_dataloader(train=True, batch_size=batch_size, num_workers=0)
-val_dataloader = validation.to_dataloader(train=False, batch_size=batch_size * 10, num_workers=0)
+# train_dataloader = training.to_dataloader(train=True, batch_size=batch_size, num_workers=0)
+# val_dataloader = validation.to_dataloader(train=False, batch_size=batch_size * 10, num_workers=0)
 
-early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
-lr_logger = LearningRateMonitor()  # log the learning rate
-logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name=args.path)  # logging results to a tensorboard
+# early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
+# lr_logger = LearningRateMonitor()  # log the learning rate
+# logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name=args.path)  # logging results to a tensorboard
 quantile_levels = [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]
-def loss(y_pred, target):
+del final_df
+def loss(y_pred, target, method):
     # calculate quantile loss
-    losses = []
-    for i, q in enumerate(quantile_levels):
-        errors = target - y_pred[..., i]
-        losses.append(torch.max((q - 1) * errors, q * errors).unsqueeze(-1))
-    losses = 2 * torch.cat(losses, dim=2)
+    if method == 'quantile':
+        losses = []
+        for i, q in enumerate(quantile_levels):
+            errors = target - y_pred[..., i]
+            losses.append(torch.max((q - 1) * errors, q * errors).unsqueeze(-1))
+        losses = 2 * torch.cat(losses, dim=2)
+        losses = torch.sum(losses, dim=2)
+        losses, _ = torch.median(losses, dim=1)
+    elif method == 'mae':
+        k = MAE()
+        temp = k.loss(y_pred[:,:,3], target)
+        losses = torch.mean(temp, dim=1)
+    elif method == 'smape':
+        k = SMAPE()
+        temp = k.loss(y_pred[:,:,3], target)
+        losses = torch.mean(temp, dim=1)
+    elif method == 'poisson':
+        k = PoissonLoss()
+        temp = k.loss(y_pred[:,:,3], target)
+        losses = torch.mean(temp, dim=1)
     return losses
 
 if __name__ == '__main__':
@@ -137,10 +160,10 @@ if __name__ == '__main__':
     dones = [f[:6] for f in dones]
 
     for tank_sample_id in list(test_sequence['group_id'].unique()):
-        if tank_sample_id in ['A043_2','A239_2','A441_2', 'B402_3', 'B402_4', 'F249_1', 'F257_2', 'F289_4', 'F406_1', 'J813_2']:
+        if tank_sample_id in ['A043_2','A239_2','A441_2', 'A695_2','B402_3', 'B402_4', 'F249_1', 'F257_2', 'F289_4', 'F406_1', 'J813_2']:
             continue
         try:
-            data_dict = np.load('errors.npy', allow_pickle=True).item()
+            data_dict = np.load(args.method + '_errors.npy', allow_pickle=True).item()
         except FileNotFoundError:
             data_dict = {}
         if tank_sample_id in data_dict.keys():
@@ -151,7 +174,6 @@ if __name__ == '__main__':
         #     data = np.load(args.outfile + '.npz')
         #     no_CPs, no_preds, no_TPS = data['no_CPs'], data['no_preds'], data['no_TPS']
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
-        tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
         train_seq = train_seq[abs(train_seq['Var_tc_readjusted']) < args.out_threshold]
         train_seq = train_seq.reset_index(drop=True)
@@ -166,16 +188,14 @@ if __name__ == '__main__':
         M2 = ((residuals - resmean) ** 2).sum()
 
         tn = TimeSeriesDataSet.from_dataset(training, train_seq, stop_randomization=True)
-        train_dataloader = tn.to_dataloader(train=False, batch_size=128, num_workers=0)
-        train_predictions = best_tft.predict(train_dataloader, mode="raw", return_x=True,
+        train_dataloader = tn.to_dataloader(train=False, batch_size=64, num_workers=0)
+        train_predictions = best_tft.predict(train_dataloader, mode="quantiles", return_x=True,
                                              trainer_kwargs=dict(accelerator="gpu"))
-        trainpred = train_predictions.output["prediction"][:, :, :]
+        trainpred = train_predictions.output[:, :, :]
         traintarget = train_predictions.x["decoder_target"][:, :]
-        quantile_loss = loss(trainpred, traintarget)
-        quantile_loss = torch.sum(quantile_loss, dim=2)
-        quantile_loss, _ = torch.median(quantile_loss, dim=1)
+        losses = loss(trainpred, traintarget, method=args.method)
         # MSE = torch.mean((trainpred - traintarget) ** 2, dim=1)
-        base = torch.quantile(quantile_loss, args.quantile)
+        base = torch.quantile(losses, args.quantile)
         final_threshold = args.threshold_scale * base
         test_seq = tank_sequence.iloc[training_cutoff:]
         test_seq = test_seq.reset_index(drop=True)
@@ -183,7 +203,7 @@ if __name__ == '__main__':
         step = args.step
         ts = pd.to_datetime(test_seq['Time'])
         scores = [0] * test_seq.shape[0]
-        errors = quantile_loss
+        errors = losses
         thresholds = [final_threshold] * test_seq.shape[0]
         outliers = []
         filtered = []
@@ -200,6 +220,9 @@ if __name__ == '__main__':
         gt_margin.append((ts[startindex-10], ts[startindex] + pd.to_timedelta(7, unit='D'), ts[startindex]))
         gt_margin.append((ts[stopindex-10], ts[stopindex] + pd.to_timedelta(7, unit='D'), ts[stopindex]))
         ctr = 0
+
+        del train_seq, tn, X, train_predictions, tank_sequence, train_dataloader,
+        del X_pred, trainpred, traintarget
         while ctr < test_seq.shape[0]:
             new = test_seq['Var_tc_readjusted'].iloc[ctr:ctr + step].values
             updates = ssa.update(new)
@@ -232,18 +255,19 @@ if __name__ == '__main__':
 
         test = TimeSeriesDataSet.from_dataset(training, test_seq, stop_randomization=True)
         test_dataloader = test.to_dataloader(train=False, batch_size=128, num_workers=0)
-        new_raw_predictions = best_tft.predict(test_dataloader, mode="raw", return_x=True,
+        del test
+        new_raw_predictions = best_tft.predict(test_dataloader, mode="quantiles", return_x=True,
                                        trainer_kwargs=dict(accelerator="gpu"))
-        onepred = new_raw_predictions.output["prediction"][:, :, :]
+        onepred = new_raw_predictions.output[:, :, :]
         onetarget = new_raw_predictions.x["decoder_target"][:, :]
-        quantile_loss = loss(onepred, onetarget)
-        quantile_loss = torch.sum(quantile_loss, dim=2)
-        quantile_loss, _ = torch.median(quantile_loss, dim=1)
+        losses = loss(onepred, onetarget, method=args.method)
+
+        del new_raw_predictions, test_dataloader
         # mse_values = torch.mean((onepred - onetarget) ** 2, dim=1)
         ctr = max_encoder_length
-        while ctr < len(quantile_loss)-max_prediction_length:
+        while ctr < len(losses)-max_prediction_length:
             mse_ind = ctr-max_encoder_length
-            mv = quantile_loss[mse_ind:mse_ind+step]
+            mv = losses[mse_ind:mse_ind+step]
             errors = torch.cat((errors, mv), dim=0)
             mse_quantile = torch.quantile(errors[:-args.step], args.quantile)
             final_threshold = args.threshold_scale * mse_quantile
@@ -253,7 +277,7 @@ if __name__ == '__main__':
             if ctr + step >= test_seq.shape[0]:
                 ss = test_seq.shape[0] - str
                 mse_ind = ctr - max_encoder_length
-                mv = quantile_loss[mse_ind:mse_ind + ss]
+                mv = losses[mse_ind:mse_ind + ss]
                 errors = torch.cat((errors, mv), dim=0)
                 mse_quantile = torch.quantile(errors, args.quantile)
                 final_threshold = args.threshold_scale * mse_quantile
@@ -279,7 +303,9 @@ if __name__ == '__main__':
         # thresholds = [0] * max_encoder_length + thresholds + [0] * max_prediction_length
         scores = [tt.item() if tt != 0 else 0 for tt in scores]
         data_dict[tank_sample_id] = scores
-        np.save('errors.npy', data_dict)
+        np.save(args.method + '_errors.npy', data_dict)
+
+        torch.cuda.empty_cache()
 
         # scores = [i for i in scores if i != 0]
         # # Run algo with settings from above

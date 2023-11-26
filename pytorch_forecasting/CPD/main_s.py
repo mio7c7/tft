@@ -27,31 +27,32 @@ from ssa.btgym_ssa import SSA
 from evaluation import Evaluation_metrics
 
 parser = argparse.ArgumentParser(description='TFT on leakage datra')
-parser.add_argument('--max_prediction_length', type=int, default=2 * 24, help='forecast horizon')
-parser.add_argument('--max_encoder_length', type=int, default=3 * 2 * 24, help='past reference data')
+parser.add_argument('--max_prediction_length', type=int, default=2 * 2 * 24, help='forecast horizon')
+parser.add_argument('--max_encoder_length', type=int, default=5 * 2 * 24, help='past reference data')
 parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
 parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
 parser.add_argument('--path', type=str, default='no_norm', help='TensorBoardLogger')
+parser.add_argument('--method', type=str, default='mae', help='method')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
 parser.add_argument('--quantile', type=float, default=0.99, help='threshold quantile')
 parser.add_argument('--threshold_scale', type=float, default=2, help='threshold scale')
 parser.add_argument('--step', type=int, default=12, help='step')
 parser.add_argument('--model_path', type=str,
-                    default='/no_normaliser/trial_16/epoch=48.ckpt', help='model_path')
+                    default='/default_r2_7d2d/trial_0/epoch=4.ckpt', help='model_path')
 parser.add_argument('--outfile', type=str, default='no_norm', help='step')
 args = parser.parse_args()
 
 max_prediction_length = args.max_prediction_length
 max_encoder_length = args.max_encoder_length
-test_sequence = pd.read_csv('tankleak.csv')
+test_sequence = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tl.csv')
 test_sequence = test_sequence[test_sequence['period'] == 0]
 test_sequence['period'] = test_sequence['period'].astype(str)
 TRAINSIZE = args.trainsize
 VALIDSIZE = args.validsize
 data = test_sequence[lambda x: x.time_idx <= TRAINSIZE + VALIDSIZE]
 data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
-tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/data_simulation/tankleakage_info.csv',
+tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/bottom02_info.csv',
                         index_col=0).reset_index(drop=True)
 
 processed_dfs = []
@@ -72,7 +73,7 @@ training = TimeSeriesDataSet(
     max_encoder_length=max_encoder_length,
     min_prediction_length=max_prediction_length,
     max_prediction_length=max_prediction_length,
-    static_categoricals=["group_id"],  # tank id, tank location state
+    static_categoricals=["group_id", "Site_No"],  # tank id, tank location state
     static_reals=["tank_max_height", "tank_max_volume"],
     # tank max height, tank max volume, no. of pumps attached to the tank
     time_varying_known_categoricals=["Time_of_day"],
@@ -85,25 +86,6 @@ training = TimeSeriesDataSet(
         "ClosingStock_tc_readjusted",
         "TankTemp",
     ],  # variance, volume, height, sales(-), delivery(+), temperature, "Del_tc", "Sales_Ini_tc",
-    # target_normalizer=GroupNormalizer(
-    #     groups=["group_id"], transformation="relu"
-    # ),  # use softplus and normalize by group
-    # target_normalizer=GroupNormalizer(
-    #         method='standard',
-    #         groups=["group_id"],
-    #         center=True,
-    #         scale_by_group=True,
-    #         transformation=None,
-    #         method_kwargs={}
-    # ),
-    # IF DEFAULT ENCODERNORMALIZER center = true,  method = standard
-    target_normalizer=EncoderNormalizer(
-        method='standard',
-        max_length=None,
-        center=False,
-        transformation=None,
-        method_kwargs={}
-    ),
     add_relative_time_idx=True,
     add_target_scales=True,
     add_encoder_length=True,
@@ -118,13 +100,28 @@ early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience
 lr_logger = LearningRateMonitor()  # log the learning rate
 logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name=args.path)  # logging results to a tensorboard
 quantile_levels = [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]
-def loss(y_pred, target):
+def loss(y_pred, target, method):
     # calculate quantile loss
-    losses = []
-    for i, q in enumerate(quantile_levels):
-        errors = target - y_pred[..., i]
-        losses.append(torch.max((q - 1) * errors, q * errors).unsqueeze(-1))
-    losses = 2 * torch.cat(losses, dim=2)
+    if method == 'quantile':
+        losses = []
+        for i, q in enumerate(quantile_levels):
+            errors = target - y_pred[..., i]
+            losses.append(torch.max((q - 1) * errors, q * errors).unsqueeze(-1))
+        losses = 2 * torch.cat(losses, dim=2)
+        losses = torch.sum(losses, dim=2)
+        losses, _ = torch.median(losses, dim=1)
+    elif method == 'mae':
+        k = MAE()
+        temp = k.loss(onepred[:,:,3], onetarget)
+        losses = torch.mean(temp, dim=1)
+    elif method == 'smape':
+        k = SMAPE()
+        temp = k.loss(onepred[:,:,3], onetarget)
+        losses = torch.mean(temp, dim=1)
+    elif method == 'poisson':
+        k = PoissonLoss()
+        temp = k.loss(onepred[:,:,3], onetarget)
+        losses = torch.mean(temp, dim=1)
     return losses
 
 def find_middle_values(values):
@@ -189,9 +186,9 @@ if __name__ == '__main__':
 
         tn = TimeSeriesDataSet.from_dataset(training, train_seq, stop_randomization=True)
         train_dataloader = tn.to_dataloader(train=False, batch_size=128, num_workers=0)
-        train_predictions = best_tft.predict(train_dataloader, mode="raw", return_x=True,
-                                             trainer_kwargs=dict(accelerator="gpu"))
-        trainpred = train_predictions.output["prediction"][:, :, :]
+        train_predictions = best_tft.predict(train_dataloader, mode="quantiles", return_x=True,
+                                             trainer_kwargs=dict(accelerator="cpu"))
+        trainpred = train_predictions.output[:, :, :]
         traintarget = train_predictions.x["decoder_target"][:, :]
         quantile_loss = loss(trainpred, traintarget)
         quantile_loss = torch.sum(quantile_loss, dim=2)
@@ -254,13 +251,11 @@ if __name__ == '__main__':
 
         test = TimeSeriesDataSet.from_dataset(training, test_seq, stop_randomization=True)
         test_dataloader = test.to_dataloader(train=False, batch_size=128, num_workers=0)
-        new_raw_predictions = best_tft.predict(test_dataloader, mode="raw", return_x=True,
-                                       trainer_kwargs=dict(accelerator="gpu"))
-        onepred = new_raw_predictions.output["prediction"][:, :, :]
+        new_raw_predictions = best_tft.predict(test_dataloader, mode="quantiles", return_x=True,
+                                       trainer_kwargs=dict(accelerator="cpu"))
+        onepred = new_raw_predictions.output[:, :, :]
         onetarget = new_raw_predictions.x["decoder_target"][:, :]
-        quantile_loss = loss(onepred, onetarget)
-        quantile_loss = torch.sum(quantile_loss, dim=2)
-        quantile_loss, _ = torch.median(quantile_loss, dim=1)
+        losses = loss(onepred, onetarget, method=args.method)
         # mse_values = torch.mean((onepred - onetarget) ** 2, dim=1)
         ctr = max_encoder_length
         while ctr < len(quantile_loss)-max_prediction_length:

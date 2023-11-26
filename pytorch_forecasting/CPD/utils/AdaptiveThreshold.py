@@ -65,7 +65,7 @@ def MAM(transformed, seg_size):
         left_win = padded_stream[i - seg_size:i]
         means[i - seg_size] = statistics.mean(left_win)
         stds[i - seg_size] = statistics.stdev(left_win)
-        rmss[i - seg_size] = statistics.mean(left_win) + 4 * statistics.stdev(left_win)
+        rmss[i - seg_size] = statistics.mean(left_win) + 3 * statistics.stdev(left_win)
         # rmss[i - seg_size] = np.sqrt(sum([(x - statistics.mean(left_win))**2 for x in left_win]))
     return means, stds, rmss
 
@@ -171,10 +171,10 @@ class HDDM_A():
         return self.in_warning_zone
 
 if __name__ == '__main__':
-    data_dict = np.load('errors.npy', allow_pickle=True).item()
-    tlgrouths = pd.read_csv('pytorch_forecasting/CPD/bottom02_info.csv',
+    data_dict = np.load('C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/errors.npy', allow_pickle=True).item()
+    tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/bottom02_info.csv',
                             index_col=0).reset_index(drop=True)
-    test_sequence = pd.read_csv('pytorch_forecasting/CPD/tl.csv')
+    test_sequence = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tl.csv')
     test_sequence = test_sequence[test_sequence['period'] == 0]
     training_cutoff = 2000 - 96
     for key, value in data_dict.items():
@@ -192,16 +192,50 @@ if __name__ == '__main__':
         startindex = temp_df.iloc[0]['time_idx']
         temp_df = test_seq[test_seq['Time_DN'] > stopdate]
         stopindex = temp_df.iloc[0]['time_idx']
-        anomaly_scores = NAB(value, 500, 50)
-        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12, 6))
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(18, 12))
 
+        # anomaly_scores = NAB(value, 1000, 12)
+        # fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(18, 12))
+        #
+        # # Plot on the first subplot
+        # ax1.plot(value, label='errors', color='blue')
+        # ax1.set_title('Plot 1')
+        # ax1.legend()
+        #
+        # # Plot on the second subplot
+        # ax2.plot(anomaly_scores, label='anomaly scores', color='red')
+        # ax2.axvline(x=startindex, color='green', linestyle='--')
+        # ax2.axvline(x=stopindex, color='green', linestyle='--')
+        # ax2.set_title('Plot 2')
+        # ax2.legend()
+        #
+        # # Adjust layout
+        # plt.tight_layout()
+        #
+        # # Show the plot
+        # plt.savefig(key + '_NAB.png')
+    # for key, value in data_dict.items():
+        transformed = PTF_TWO(value, k=48)
+        means, stds, rmss = MAM(transformed, seg_size=48)
+    #
         # Plot on the first subplot
         ax1.plot(value, label='errors', color='blue')
         ax1.set_title('Plot 1')
         ax1.legend()
 
         # Plot on the second subplot
-        ax2.plot(anomaly_scores, label='anomaly scores', color='red')
+        ax2.plot(transformed, label='trasnformed', color='red')
+        # ax2.plot(means, label='mean', color='blue')
+        # ax2.plot(stds, label='standard deviation', color='green')
+        # ax2.plot(rmss, label='threshold', color='orange')
+        # mark = []
+        # for index, value in enumerate(transformed):
+        #     if value > rmss[index]:
+        #         mark.append(index)
+        # trans = [transformed[i] for i in mark]
+        # ax2.plot(mark, trans, marker="o", ls="", ms=3, color='black')
+        ax2.axvline(x=startindex, color='green', linestyle='--')
+        ax2.axvline(x=stopindex, color='green', linestyle='--')
         ax2.set_title('Plot 2')
         ax2.legend()
 
@@ -209,36 +243,7 @@ if __name__ == '__main__':
         plt.tight_layout()
 
         # Show the plot
-        plt.savefig(key + '_NAB.png')
-    # for key, value in data_dict.items():
-    #     transformed = PTF_TWO(value, k=48)
-    #     means, stds, rmss = MAM(transformed, seg_size=48)
-    #     fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
-    #
-    #     # Plot on the first subplot
-    #     ax1.plot(value, label='errors', color='blue')
-    #     ax1.set_title('Plot 1')
-    #     ax1.legend()
-    #
-    #     # Plot on the second subplot
-    #     ax2.plot(transformed, label='trasnformed', color='red')
-    #     ax2.plot(means, label='mean', color='blue')
-    #     ax2.plot(stds, label='standard deviation', color='green')
-    #     ax2.plot(rmss, label='threshold', color='orange')
-    #     mark = []
-    #     for index, value in enumerate(transformed):
-    #         if value > rmss[index]:
-    #             mark.append(index)
-    #     trans = [transformed[i] for i in mark]
-    #     ax2.plot(mark, trans, marker="o", ls="", ms=3, color='black')
-    #     ax2.set_title('Plot 2')
-    #     ax2.legend()
-    #
-    #     # Adjust layout
-    #     plt.tight_layout()
-    #
-    #     # Show the plot
-    #     plt.savefig(key+'.png')
+        plt.savefig(key+'.png')
 
     # hddm_a = HDDM_A()
     # data_stream = np.random.randint(2, size=2000)
