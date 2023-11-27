@@ -1,7 +1,12 @@
 import os
 import warnings
+
 warnings.filterwarnings("ignore")  # avoid printing out absolute paths
+import copy
+from pathlib import Path
+import warnings
 import numpy as np
+import glob
 import pandas as pd
 import torch
 import lightning.pytorch as pl
@@ -10,17 +15,17 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.tuner import Tuner
 from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data import GroupNormalizer, EncoderNormalizer
-from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss, RMSE, TweedieLoss
+from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
+import pickle
 import argparse
 import matplotlib.pyplot as plt
 import math
 import sys
-import pylab
-from utils.AdaptiveThreshold import thresholding_algo
 sys.path.append('./')
 from ssa.btgym_ssa import SSA
 from evaluation import Evaluation_metrics
+
 parser = argparse.ArgumentParser(description='TFT on leakage datra')
 parser.add_argument('--max_prediction_length', type=int, default=2 * 24, help='forecast horizon')
 parser.add_argument('--max_encoder_length', type=int, default=3 * 2 * 24, help='past reference data')
@@ -35,7 +40,7 @@ parser.add_argument('--con', type=int, default=15, help='consecutive counter')
 parser.add_argument('--threshold_scale', type=float, default=2, help='threshold scale')
 parser.add_argument('--step', type=int, default=12, help='step')
 parser.add_argument('--model_path', type=str,
-                    default='/EncoderNormalizerrobust_r2_5d2d/trial_17/epoch=49.ckpt', help='model_path')
+                    default='/no_normaliser/trial_16/epoch=48.ckpt', help='model_path')
 parser.add_argument('--outfile', type=str, default='no_norm', help='step')
 args = parser.parse_args()
 
@@ -50,9 +55,6 @@ data = test_sequence[lambda x: x.time_idx <= TRAINSIZE + VALIDSIZE]
 data = data[abs(data['Var_tc_readjusted']) < args.out_threshold]
 tlgrouths = pd.read_csv('pytorch_forecasting/CPD/bottom02_info.csv',
                         index_col=0).reset_index(drop=True)
-test_sequence = test_sequence[['Time','Time_DN','time_idx', 'Var_tc_readjusted', 'group_id', 'Site_No',
-                     'tank_max_height', 'tank_max_volume', 'Time_of_day', 'ClosingHeight_tc_readjusted',
-                     'ClosingStock_tc_readjusted', 'TankTemp']]
 
 processed_dfs = []
 groups = data.groupby('group_id')
@@ -62,9 +64,6 @@ for group_id, group_df in groups:
     group_df['time_idx'] = group_df.index
     processed_dfs.append(group_df)
 final_df = pd.concat(processed_dfs, ignore_index=True)
-final_df = final_df[['time_idx', 'Var_tc_readjusted', 'group_id', 'Site_No',
-                     'tank_max_height', 'tank_max_volume', 'Time_of_day', 'ClosingHeight_tc_readjusted',
-                     'ClosingStock_tc_readjusted', 'TankTemp']]
 
 training = TimeSeriesDataSet(
     final_df[lambda x: x.time_idx <= 3750],
@@ -91,13 +90,13 @@ training = TimeSeriesDataSet(
     # target_normalizer=GroupNormalizer(
     #     groups=["group_id"], transformation="softplus"
     # ),  # use softplus and normalize by group
-    target_normalizer=EncoderNormalizer(
-        method='robust',
-        max_length=None,
-        center=True,
-        transformation=None,
-        method_kwargs={}
-    ),
+    # target_normalizer=EncoderNormalizer(
+    #     method='robust',
+    #     max_length=None,
+    #     center=True,
+    #     transformation=None,
+    #     method_kwargs={}
+    # ),
     # target_normalizer=EncoderNormalizer(
     #     method='robust',
     #     center=False
@@ -107,16 +106,15 @@ training = TimeSeriesDataSet(
     add_encoder_length=True,
     allow_missing_timesteps=True
 )
-# validation = TimeSeriesDataSet.from_dataset(training, final_df, predict=True, stop_randomization=True)
+validation = TimeSeriesDataSet.from_dataset(training, final_df, predict=True, stop_randomization=True)
 batch_size = 128  # set this between 32 to 128
-# train_dataloader = training.to_dataloader(train=True, batch_size=batch_size, num_workers=0)
-# val_dataloader = validation.to_dataloader(train=False, batch_size=batch_size * 10, num_workers=0)
+train_dataloader = training.to_dataloader(train=True, batch_size=batch_size, num_workers=0)
+val_dataloader = validation.to_dataloader(train=False, batch_size=batch_size * 10, num_workers=0)
 
-# early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
-# lr_logger = LearningRateMonitor()  # log the learning rate
-# logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name=args.path)  # logging results to a tensorboard
+early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
+lr_logger = LearningRateMonitor()  # log the learning rate
+logger = TensorBoardLogger(save_dir=os.getcwd(), version=1, name=args.path)  # logging results to a tensorboard
 quantile_levels = [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]
-del final_df
 def loss(y_pred, target, method):
     # calculate quantile loss
     if method == 'quantile':
@@ -139,15 +137,28 @@ def loss(y_pred, target, method):
         k = PoissonLoss()
         temp = k.loss(y_pred[:,:,3], target)
         losses = torch.mean(temp, dim=1)
-    elif method == 'rmse':
-        k = RMSE()
-        temp = k.loss(y_pred[:,:,3], target)
-        losses = torch.mean(temp, dim=1)
-    elif method == 'tweedie':
-        k = TweedieLoss()
-        temp = k.loss(y_pred[:,:,3], target)
-        losses = torch.mean(temp, dim=1)
     return losses
+
+def find_middle_values(values):
+    if len(values) == 0:
+        return []
+    consecutive_sequences = []
+    current_sequence = [values[0]]
+    for i in range(1, len(values)):
+        if values[i] - values[i-1] == 1:
+            current_sequence.append(values[i])
+        else:
+            if len(current_sequence) >= args.con:
+                middle_index = len(current_sequence) // 2
+                middle_value = current_sequence[middle_index]
+                consecutive_sequences.append(middle_value)
+            current_sequence = [values[i]]
+    # Check if there's a sequence at the end
+    if len(current_sequence) >= args.con:
+        middle_index = len(current_sequence) // 2
+        middle_value = current_sequence[middle_index]
+        consecutive_sequences.append(middle_value)
+    return consecutive_sequences
 
 if __name__ == '__main__':
     path = os.getcwd() + args.model_path
@@ -159,8 +170,6 @@ if __name__ == '__main__':
     delays = []
     runtime = []
     error_margin = 864000
-    lag = 154
-    influence = 1
 
     if not os.path.exists(args.outfile):
         os.makedirs(args.outfile)
@@ -168,20 +177,15 @@ if __name__ == '__main__':
     dones = [f[:6] for f in dones]
 
     for tank_sample_id in list(test_sequence['group_id'].unique()):
-        if tank_sample_id in ['A043_2','A239_2','A441_2', 'A695_2','B402_3', 'B402_4', 'F249_1', 'F257_2', 'F289_4', 'F406_1', 'J813_2']:
+        if tank_sample_id in ['A043_2','A239_2','A441_2', 'B402_3', 'B402_4', 'F249_1', 'F257_2', 'F289_4', 'F406_1', 'J813_2']:
             continue
-        try:
-            data_dict = np.load(args.method + '_errors.npy', allow_pickle=True).item()
-        except FileNotFoundError:
-            data_dict = {}
-        if tank_sample_id in data_dict.keys():
+        if tank_sample_id in dones:
             continue
-        # if tank_sample_id in dones:
-        #     continue
-        # if os.path.isfile(args.outfile + '.npz'):
-        #     data = np.load(args.outfile + '.npz')
-        #     no_CPs, no_preds, no_TPS = data['no_CPs'], data['no_preds'], data['no_TPS']
+        if os.path.isfile(args.outfile + '.npz'):
+            data = np.load(args.outfile + '.npz')
+            no_CPs, no_preds, no_TPS = data['no_CPs'], data['no_preds'], data['no_TPS']
         tank_sequence = test_sequence[(test_sequence['group_id'] == tank_sample_id)]
+        tank_sequence = tank_sequence[tank_sequence['period'] == '0']
         train_seq = tank_sequence.iloc[:training_cutoff]
         train_seq = train_seq[abs(train_seq['Var_tc_readjusted']) < args.out_threshold]
         train_seq = train_seq.reset_index(drop=True)
@@ -196,7 +200,7 @@ if __name__ == '__main__':
         M2 = ((residuals - resmean) ** 2).sum()
 
         tn = TimeSeriesDataSet.from_dataset(training, train_seq, stop_randomization=True)
-        train_dataloader = tn.to_dataloader(train=False, batch_size=64, num_workers=0)
+        train_dataloader = tn.to_dataloader(train=False, batch_size=128, num_workers=0)
         train_predictions = best_tft.predict(train_dataloader, mode="quantiles", return_x=True,
                                              trainer_kwargs=dict(accelerator="gpu"))
         trainpred = train_predictions.output[:, :, :]
@@ -228,9 +232,6 @@ if __name__ == '__main__':
         gt_margin.append((ts[startindex-10], ts[startindex] + pd.to_timedelta(7, unit='D'), ts[startindex]))
         gt_margin.append((ts[stopindex-10], ts[stopindex] + pd.to_timedelta(7, unit='D'), ts[stopindex]))
         ctr = 0
-
-        del train_seq, tn, X, train_predictions, tank_sequence, train_dataloader,
-        del X_pred, trainpred, traintarget
         while ctr < test_seq.shape[0]:
             new = test_seq['Var_tc_readjusted'].iloc[ctr:ctr + step].values
             updates = ssa.update(new)
@@ -248,8 +249,8 @@ if __name__ == '__main__':
                     resmean += delta / (ctr + i1 + training_cutoff)
                     M2 += delta * (residual[i1] - resmean)
                     stdev = math.sqrt(M2 / (ctr + i1 + training_cutoff - 1))
-                    threshold_upper = resmean + 2 * stdev
-                    threshold_lower = resmean - 2 * stdev
+                    threshold_upper = resmean + 3 * stdev
+                    threshold_lower = resmean - 3 * stdev
 
                     if (residual[i1] <= threshold_upper) and (residual[i1] >= threshold_lower):
                         filtered.append(new[i1])
@@ -263,15 +264,11 @@ if __name__ == '__main__':
 
         test = TimeSeriesDataSet.from_dataset(training, test_seq, stop_randomization=True)
         test_dataloader = test.to_dataloader(train=False, batch_size=128, num_workers=0)
-        del test
         new_raw_predictions = best_tft.predict(test_dataloader, mode="quantiles", return_x=True,
                                        trainer_kwargs=dict(accelerator="gpu"))
         onepred = new_raw_predictions.output[:, :, :]
         onetarget = new_raw_predictions.x["decoder_target"][:, :]
         losses = loss(onepred, onetarget, method=args.method)
-
-        del new_raw_predictions, test_dataloader
-        # mse_values = torch.mean((onepred - onetarget) ** 2, dim=1)
         ctr = max_encoder_length
         while ctr < len(losses)-max_prediction_length:
             mse_ind = ctr-max_encoder_length
@@ -292,94 +289,53 @@ if __name__ == '__main__':
                 thresholds[ctr:ctr + ss] = [final_threshold] * ss
                 scores[ctr:ctr + ss] = mv
 
-            # if ctr >= max_prediction_length + max_encoder_length:
-            #     new_prediction_data = test_seq[ctr + step - max_prediction_length - max_encoder_length:ctr + step]
-            #     new_raw_predictions = best_tft.predict(new_prediction_data, mode="raw", return_x=True)
-            #     onepred = new_raw_predictions.output["prediction"][:, :, 3]
-            #     onetarget = new_raw_predictions.x["decoder_target"][:, :]
-            #     mse_values = torch.mean((onepred - onetarget) ** 2, dim=1)
-            #     errors = np.append(errors, mse_values)
-            #     mse_quantile = np.quantile(errors, args.quantile)
-            #     final_threshold = args.threshold_scale * mse_quantile
-            #     thresholds[ctr:ctr + step] = [final_threshold] * step
-            #     scores[ctr:ctr + step] = [mse_values] * step
-
-
-
-        # determine the results of prediction
-        # scores = [0] * max_encoder_length + scores + [0] * max_prediction_length
-        # thresholds = [0] * max_encoder_length + thresholds + [0] * max_prediction_length
+        preds = [idx+args.max_prediction_length//2 for idx in range(len(scores)) if scores[idx] > thresholds[idx]]
+        preds = find_middle_values(preds)
         scores = [tt.item() if tt != 0 else 0 for tt in scores]
-        data_dict[tank_sample_id] = scores
-        np.save(args.method + '_errors.npy', data_dict)
+        thresholds = [tt.item() if tt != 0 else 0 for tt in thresholds]
 
-        torch.cuda.empty_cache()
+        no_CPs += 2
+        no_preds += len(preds)
+        mark = []
+        for j in preds:
+            timestamp = ts[j]
+            for l in gt_margin:
+                if timestamp >= l[0] and timestamp <= l[1]:
+                    if l not in mark:
+                        mark.append(l)
+                    else:
+                        no_preds -= 1
+                        continue
+                    no_TPS += 1
+                    delays.append(timestamp - l[2])
+        np.savez(args.outfile, no_CPs=no_CPs, no_preds=no_preds, no_TPS=no_TPS)
+        filtered = filtered + [0] * (len(ts) - len(filtered))
+        fig = plt.figure()
+        fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
+        ax[0].plot(ts.array, filtered)
+        ax[0].axvline(x=ts[startindex], color='green', linestyle='--')
+        ax[0].axvline(x=ts[stopindex], color='green', linestyle='--')
+        for cp in preds:
+            ax[0].axvline(x=ts[cp], color='purple', alpha=0.6)
+        ax[1].scatter(ts.array, scores)
+        ax[1].scatter(ts.array, thresholds)
+        plt.tight_layout()
+        plt.savefig(args.outfile + '/' + tank_sample_id + '.png')
+        plt.close('all')
+        del fig
 
-        # scores = [i for i in scores if i != 0]
-        # # Run algo with settings from above
-        # threshold = 15
-        # result = thresholding_algo(scores, lag=lag, threshold=threshold, influence=influence)
-        # fig = plt.figure()
-        # fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
-        # # Plot result
-        # ax[0].plot(np.arange(1, len(scores) + 1), scores)
-        #
-        # ax[0].plot(np.arange(1, len(scores) + 1),
-        #            result["avgFilter"], color="cyan", lw=2)
-        #
-        # ax[0].plot(np.arange(1, len(scores) + 1),
-        #            result["avgFilter"] + threshold * result["stdFilter"], color="green", lw=2)
-        #
-        # ax[0].plot(np.arange(1, len(scores) + 1),
-        #            result["avgFilter"] - threshold * result["stdFilter"], color="green", lw=2)
-        #
-        # ax[1].step(np.arange(1, len(scores) + 1), result["signals"], color="red", lw=2)
-        # ax[1].axis(ymin=-1.5,ymax=1.5)
-        # plt.tight_layout()
-        # plt.savefig(tank_sample_id + '.png')
+    rec = Evaluation_metrics.recall(no_TPS, no_CPs)
+    FAR = Evaluation_metrics.False_Alarm_Rate(no_preds, no_TPS)
+    prec = Evaluation_metrics.precision(no_TPS, no_preds)
+    f1score = Evaluation_metrics.F1_score(rec, prec)
+    f2score = Evaluation_metrics.F2_score(rec, prec)
+    # dd = Evaluation_metrics.detection_delay(delays)
+    print('recall: ', rec)
+    print('false alarm rate: ', FAR)
+    print('precision: ', prec)
+    print('F1 Score: ', f1score)
+    print('F2 Score: ', f2score)
+    # print('detection delay: ', dd)
 
-    #     no_CPs += 2
-    #     no_preds += len(preds)
-    #     mark = []
-    #     for j in preds:
-    #         timestamp = ts[j]
-    #         for l in gt_margin:
-    #             if timestamp >= l[0] and timestamp <= l[1]:
-    #                 if l not in mark:
-    #                     mark.append(l)
-    #                 else:
-    #                     no_preds -= 1
-    #                     continue
-    #                 no_TPS += 1
-    #                 delays.append(timestamp - l[2])
-    #     np.savez(args.outfile, no_CPs=no_CPs, no_preds=no_preds, no_TPS=no_TPS)
-    #     filtered = filtered + [0] * (len(ts) - len(filtered))
-    #     fig = plt.figure()
-    #     fig, ax = plt.subplots(2, figsize=[18, 16], sharex=True)
-    #     ax[0].plot(ts.array, filtered)
-    #     ax[0].axvline(x=ts[startindex], color='green', linestyle='--')
-    #     ax[0].axvline(x=ts[stopindex], color='green', linestyle='--')
-    #     for cp in preds:
-    #         ax[0].axvline(x=ts[cp], color='purple', alpha=0.6)
-    #     ax[1].scatter(ts.array, scores)
-    #     ax[1].scatter(ts.array, thresholds)
-    #     plt.tight_layout()
-    #     plt.savefig(args.outfile + '/' + tank_sample_id + '.png')
-    #     plt.close('all')
-    #     del fig
-    #
-    # rec = Evaluation_metrics.recall(no_TPS, no_CPs)
-    # FAR = Evaluation_metrics.False_Alarm_Rate(no_preds, no_TPS)
-    # prec = Evaluation_metrics.precision(no_TPS, no_preds)
-    # f1score = Evaluation_metrics.F1_score(rec, prec)
-    # f2score = Evaluation_metrics.F2_score(rec, prec)
-    # # dd = Evaluation_metrics.detection_delay(delays)
-    # print('recall: ', rec)
-    # print('false alarm rate: ', FAR)
-    # print('precision: ', prec)
-    # print('F1 Score: ', f1score)
-    # print('F2 Score: ', f2score)
-    # # print('detection delay: ', dd)
-    #
-    # npz_filename = args.outfile
-    # np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score)
+    npz_filename = args.outfile
+    np.savez(npz_filename, rec=rec, FAR=FAR, prec=prec, f1score=f1score, f2score=f2score)
