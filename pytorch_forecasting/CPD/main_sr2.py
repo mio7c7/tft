@@ -31,7 +31,7 @@ parser.add_argument('--max_prediction_length', type=int, default=2 * 24, help='f
 parser.add_argument('--max_encoder_length', type=int, default=3 * 2 * 24, help='past reference data')
 parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
-parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
+parser.add_argument('--out_threshold', type=float, default=1, help='threshold for outlier filtering')
 parser.add_argument('--path', type=str, default='no_norm', help='TensorBoardLogger')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
 parser.add_argument('--quantile', type=float, default=0.985, help='threshold quantile')

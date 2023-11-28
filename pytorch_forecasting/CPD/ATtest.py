@@ -10,7 +10,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.tuner import Tuner
 from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data import GroupNormalizer, EncoderNormalizer
-from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss, RMSE, TweedieLoss
+from pytorch_forecasting.metrics import MAE, SMAPE, PoissonLoss, QuantileLoss, RMSE, TweedieLoss, MASE
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 import argparse
 import matplotlib.pyplot as plt
@@ -26,7 +26,7 @@ parser.add_argument('--max_prediction_length', type=int, default=2 * 24, help='f
 parser.add_argument('--max_encoder_length', type=int, default=3 * 2 * 24, help='past reference data')
 parser.add_argument('--trainsize', type=int, default=4000, help='train size')
 parser.add_argument('--validsize', type=int, default=500, help='validtaion size')
-parser.add_argument('--out_threshold', type=float, default=2, help='threshold for outlier filtering')
+parser.add_argument('--out_threshold', type=float, default=1, help='threshold for outlier filtering')
 parser.add_argument('--path', type=str, default='no_norm', help='TensorBoardLogger')
 parser.add_argument('--method', type=str, default='mae', help='method')
 parser.add_argument('--tank_sample_id', type=str, default='A205_1', help='tank sample for experiment')
@@ -126,7 +126,7 @@ def loss(y_pred, target, method):
             losses.append(torch.max((q - 1) * errors, q * errors).unsqueeze(-1))
         losses = 2 * torch.cat(losses, dim=2)
         losses = torch.sum(losses, dim=2)
-        losses, _ = torch.median(losses, dim=1)
+        losses = torch.mean(losses, dim=1)
     elif method == 'mae':
         k = MAE()
         temp = k.loss(y_pred[:,:,3], target)
@@ -171,7 +171,7 @@ if __name__ == '__main__':
         if tank_sample_id in ['A043_2','A239_2','A441_2', 'A695_2','B402_3', 'B402_4', 'F249_1', 'F257_2', 'F289_4', 'F406_1', 'J813_2']:
             continue
         try:
-            data_dict = np.load(args.method + '_errors.npy', allow_pickle=True).item()
+            data_dict = np.load(args.method + '_errors31.npy', allow_pickle=True).item()
         except FileNotFoundError:
             data_dict = {}
         if tank_sample_id in data_dict.keys():
@@ -248,8 +248,8 @@ if __name__ == '__main__':
                     resmean += delta / (ctr + i1 + training_cutoff)
                     M2 += delta * (residual[i1] - resmean)
                     stdev = math.sqrt(M2 / (ctr + i1 + training_cutoff - 1))
-                    threshold_upper = resmean + 2 * stdev
-                    threshold_lower = resmean - 2 * stdev
+                    threshold_upper = resmean + 3 * stdev
+                    threshold_lower = resmean - 3 * stdev
 
                     if (residual[i1] <= threshold_upper) and (residual[i1] >= threshold_lower):
                         filtered.append(new[i1])
@@ -311,7 +311,7 @@ if __name__ == '__main__':
         # thresholds = [0] * max_encoder_length + thresholds + [0] * max_prediction_length
         scores = [tt.item() if tt != 0 else 0 for tt in scores]
         data_dict[tank_sample_id] = scores
-        np.save(args.method + '_errors.npy', data_dict)
+        np.save(args.method + '_errors31.npy', data_dict)
 
         torch.cuda.empty_cache()
 

@@ -7,13 +7,13 @@ import pandas as pd
 from scipy.stats import norm
 
 if __name__ == '__main__':
-    data_dict = np.load('tweedie_errors.npy', allow_pickle=True).item()
-    # tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/bottom02_info.csv',
-    #                         index_col=0).reset_index(drop=True)
-    # test_sequence = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tl.csv')
-    tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/bottom02_info.csv',
+    data_dict = np.load('mae_errors3.npy', allow_pickle=True).item()
+    tlgrouths = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/data_simulation/bottom02_info.csv',
                             index_col=0).reset_index(drop=True)
-    test_sequence = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tl.csv')
+    test_sequence = pd.read_csv('C:/Users/Administrator/Documents/GitHub/tft/pytorch_forecasting/CPD/tl.csv')
+    # tlgrouths = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/bottom02_info.csv',
+    #                         index_col=0).reset_index(drop=True)
+    # test_sequence = pd.read_csv('C:/Users/s3912230/Documents/GitHub/tft/pytorch_forecasting/CPD/tl.csv')
     test_sequence = test_sequence[test_sequence['period'] == 0]
     training_cutoff = 2000 - 96
     for key, value in data_dict.items():
@@ -49,4 +49,4 @@ if __name__ == '__main__':
         plt.tight_layout()
 
         # Show the plot
-        plt.savefig(key+'_tweedie.png')
+        plt.savefig(key+'_mar3.png')
